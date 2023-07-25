@@ -13,6 +13,7 @@
     "@xmpp/client": "^0.13.1",
     "@xmpp/debug": "^0.13.0",
     "dotenv": "^16.3.1",
+    "js-base64": "^3.7.5",
     "node-xmpp-client": "^3.2.0",
     "strophe.js": "^1.6.2"
   }
