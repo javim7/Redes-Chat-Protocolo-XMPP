@@ -1,15 +1,20 @@
-/*
-Javier Mombiela
-Carne: 20067
-Seccion: 11
-
-Proyecto1: Uso de unprotocolo existente (XMPP)
-*/
+/**
+ * client.js: cliente de mensajeria instantanea que soporta el protocolo XMPP.
+ * Este archivo es el responsable de poder conectarse a alumchat.xyz y poder enviar y recibir mensajes.
+ *
+ * @author Javier Mombiela
+ * @contact mom20067@uvg.edu.gt
+ * @created 2023-07-25
+ * @requires net
+ * @requires js-base64
+ * @requires readline
+ */
 
 // Importamos las librerias necesarias.
 const net = require('net');
 const readline = require('readline');
 const { encode } = require('js-base64');
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 // Creamos la interfaz para leer datos del usuario.
 const rl = readline.createInterface({
@@ -20,12 +25,18 @@ const rl = readline.createInterface({
 // Creamos el cliente.
 const client = new net.Socket();
 
-// Main: controla el programa
+/**
+ * Main: controla el programa
+ */
 function main() {
   console.log('\n----BIENVENIDO A ALUMCHAT----');
   menu();
 }
 
+
+/**
+ * Menu: despliega las opciones disponibles
+ */
 function menu() {
   console.log('\nMENU:');
   console.log('[1] INICIAR SESION');
@@ -50,7 +61,10 @@ function menu() {
   });
 }
 
-// Submenu: despliega las opciones disponibles despues de iniciar sesion
+/**
+ * submenu: despliega las opciones disponibles dentro de la sesion
+ * @param {String} userJid - JID del usuario que inicio sesion
+ */
 function submenu(userJid) {
   console.log('\nQUE DESEA HACER?');
   console.log('[1] Mostrar todos los usuarios/contactos y su estado');
@@ -66,7 +80,7 @@ function submenu(userJid) {
   rl.question('> ', answer => {
     switch (answer) {
       case '1':
-        presence();
+        getUsers(userJid);
         break;
       case '2':
         // Add a user to contacts
@@ -99,10 +113,12 @@ function submenu(userJid) {
     });
   }
 
-// Login: inicia sesion en el servidor y desplegar opciones
+/**
+ * Login: inicia sesion en el servidor
+ */
 function login() {
   console.log("\nINGRESE SUS CREDENCIALES:")
-  rl.question('usuario: ', jid => {
+  rl.question('usuario: ', username => {
     rl.question('contraseña: ', password => {
       client.connect(5222, 'alumchat.xyz', () => {
         console.log('\nConectando a alumchat.xyz...');
@@ -118,20 +134,22 @@ function login() {
         // ver si el servidor mando un stream:features element
         if (data.toString().includes('<stream:features>')) {
           // mandar request de autenticacion
-          const authRequest = `<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='PLAIN'>${encode(
-            '\0' + jid + '\0' + password
+          const authRequestStanza = `<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='PLAIN'>${encode(
+            '\0' + username + '\0' + password
           )}</auth>`;
-          client.write(authRequest);
+          client.write(authRequestStanza);
         }
 
         // ver si el servidor mando un success element
         if (data.toString().includes('<success')) {
           console.log('Inicio de sesion exitoso!');
-          console.log('Bienvenido de nuevo, ' + jid + '!');
-          submenu(jid + '@alumchat.xyz');
+          console.log('Bienvenido de nuevo, ' + username + '!');
+          const userJid = username + '@alumchat.xyz';
+          submenu(userJid);
         }
         else if (data.toString().includes('<failure')) {
           console.log('Inicio de sesion fallido! Intente de nuevo!');
+          // Cerrar la conexión existente si hay alguna
           login();
         }
       });
@@ -143,27 +161,34 @@ function login() {
   });
 }
 
-// Register: registra un usuario en el servidor
+/**
+ * Register: registra un nuevo usuario en el servidor
+ */
 function register() {
   // Registration code goes here
 }
 
-// Exit: sale del programa
+/**
+ * Exit: cierra el programa
+ */
 function exit() {
   console.log('Saliendo...');
   rl.close();
 }
 
-// Direct message: envia un mensaje directo a un usuario
+/**
+ * directMessage: envia un mensaje directo a un usuario
+ * @param {String} userJid - JID del usuario que inicio sesion
+ */
 function directMessage(userJid) {
   console.log("\nINFORMACION DEL MENSAJE:")
   rl.question('remitente: ', jid => {
     jid = jid + '@alumchat.xyz';
     // console.log(jid)
     rl.question('mensaje: ', message => {
-      // Send direct message
-      const directMessage = `<message from='${userJid}' to='${jid}' type='chat'><body>${message}</body></message>`;
-      client.write(directMessage);
+      // stanza para enviar mensaje
+      const directMessageStanza = `<message from='${userJid}' to='${jid}' type='chat'><body>${message}</body></message>`;
+      client.write(directMessageStanza);
 
       client.on('data', data => {
         const dataReceived = data.toString();
@@ -182,9 +207,21 @@ function directMessage(userJid) {
   });
 }
 
-// Presence: muestra los usuarios conectados y su estado
-function presence() {
-  
+/**
+ * getUsers: muestra el listado de los contactos del usuario
+ * @param {String} userJid - JID del usuario que inicio sesion
+ */
+function getUsers(userJid) {
+  // stanza para ver que entidades hay en el servidor
+  const rosterStanza = `<iq type="get" id="roster_1" from="${userJid}"><query xmlns="jabber:iq:roster"/></iq>`;
+  client.write(rosterStanza);
+
+  client.on('data', data => {
+    const dataReceived = data.toString();
+    if (dataReceived.includes('id="roster_1"')) {
+      console.log("\nData del servidor: " + dataReceived);
+    }
+  });
 }
 
 //corremos el programa
