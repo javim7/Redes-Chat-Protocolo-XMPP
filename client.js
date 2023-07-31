@@ -10,7 +10,6 @@
  */
 
 const { client, xml } = require("@xmpp/client");
-const tls = require('tls');
 const debug = require("@xmpp/debug");
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -28,14 +27,64 @@ class Client {
   }
 
   /**
-   * connect: conecta al cliente XMPP al servidor.
+   * register: registra un nuevo usuario en el servidor.
+   * @param {String} username 
+   * @param {String} password 
    */
-  async connect() {
+  async register(username, password, email) {
+    if (this.xmpp && this.xmpp.status === "online") {
+      throw new Error("You are already connected. Cannot register while connected.");
+    }
+
+    const registerStanza = xml(
+      "iq",
+      { type: "set" },
+      xml("query", { xmlns: "jabber:iq:register" }, [
+        xml("username", {}, username),
+        xml("password", {}, password),
+        xml("email", {}, email),
+      ])
+    );
+
     this.xmpp = client({
       service: this.service,
       domain: this.domain,
-      username: this.username,
-      password: this.password,
+      username: username,
+      password: password,
+    });
+
+    this.xmpp.on("online", async () => {
+      await this.xmpp.send(xml("presence"));
+    });
+
+    try {
+      await this.xmpp.start();
+      await this.xmpp.send(registerStanza);
+    }
+    catch (err) {
+      if (err.condition === 'conflict') {
+        throw new Error('\nEl usuario ya existe!');
+      } else {
+        throw err;
+      }
+    }
+    finally {
+      await this.xmpp.stop();
+      this.xmpp = null;
+    }
+  }
+
+  /**
+   * login: conecta al cliente XMPP al servidor.
+   * @param {String} username
+   * @param {String} password
+   */
+  async login(username, password) {
+    this.xmpp = client({
+      service: this.service,
+      domain: this.domain,
+      username: username,
+      password: password,
     });
   
     this.xmpp.on("online", async () => {
@@ -69,36 +118,32 @@ class Client {
 
   async getContacts() {
     if (!this.xmpp) {
-      throw new Error("Error en la conexion, intenta de nuevo.");
+      throw new Error("Error in connection, please try again.");
     }
 
     const rosterStanza = xml(
-      "iq", 
-      { type: "get", id: "roster1" },
+      "iq",
+      { type: "get" },
       xml("query", { xmlns: "jabber:iq:roster" })
     );
 
     try {
-      const response = await this.xmpp.sendIQ(rosterStanza);
-      const contacts = [];
+      const response = await this.xmpp.send(rosterStanza);
 
-      if (response.is('iq') && response.getChild('query')) {
-        const query = response.getChild('query');
-        const items = query.getChildren('item');
+      console.log("Roster Response:", response.toString()); // Log the raw response
 
-        for (const item of items) {
-          const contact = {
-            jid: item.attrs.jid,
-            name: item.attrs.name || null,
-          };
+      // Set the correct namespace for parsing the response
+      const contacts = response.getChild("query", "jabber:iq:roster").getChildren("item");
 
-          contacts.push(contact);
-        }
-      }
-
-      return contacts;
+      return contacts.map((contact) => {
+        return {
+          jid: contact.attrs.jid,
+          name: contact.attrs.name,
+          subscription: contact.attrs.subscription,
+        };
+      });
     } catch (err) {
-      throw new Error('\nError al obtener contactos!', err.message);
+      throw new Error("Error fetching contacts:", err.message);
     }
   }
 
@@ -119,6 +164,21 @@ class Client {
     );
 
     await this.xmpp.send(messageStanza);
+  }
+
+  async changeStatus(show, status = "") {
+    if (!this.xmpp) {
+      throw new Error("Error en la conexion, intenta de nuevo.");
+    }
+
+    const statusStanza = xml(
+      "presence",
+      {},
+      xml("show", {}, show),
+      xml("status", {}, status)
+    );
+
+    await this.xmpp.send(statusStanza);
   }
 }
 

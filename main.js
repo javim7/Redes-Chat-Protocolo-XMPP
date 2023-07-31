@@ -43,10 +43,10 @@ function menu() {
     rl.question('Opcion -> ', answer => {
       switch (answer) {
         case '1':
-            register();
+            registerMain();
             break;
         case '2':
-            login();
+            loginMain();
             break;
         case '3':
             logoutMain();
@@ -95,7 +95,7 @@ function menu() {
           // Participate in group conversations
              break;
         case '6':
-          // Set presence message
+          changeStatusMain();
           break;
         case '7':
           // Send/receive notifications
@@ -116,29 +116,42 @@ function menu() {
 /**
  * register: registra un nuevo usuario en el servidor
  */
-async function register() {
-
+async function registerMain() {
+    console.log('\nREGISTRARSE:');
+    rl.question('Usuario: ', async username => {
+      rl.question('Contraseña: ', async password => {
+        rl.question('Correo: ', async email => {
+          try {
+            // llamar a la funcion con los parametros
+            await client.register(username, password, email);
+            console.log('\nRegistro exitoso. Ahora puedes iniciar sesión con tus credenciales.');
+            loginMain(); //regresar al menu principal
+          } catch (err) {
+            // Si hay un error, se muestra en pantalla y se vuelve a llamar a register()
+            console.log(err.message);
+            menu();
+          }
+        });
+      });
+    });
 }
 
 /**
  * login: inicia sesion en el servidor
  */
-async function login() {
+async function loginMain() {
     console.log('\nINICIAR SESION:')
     rl.question('Usuario: ', async username => {
       rl.question('Contraseña: ', async password => {
-        client.username = username;
-        client.password = password;
-  
         try {
-            await client.connect(); //esperando a la funcion connect()
+            await client.login(username, password); //esperando a la funcion login()
             console.log('\nSesion iniciada exitosamente!');
             console.log('Bienvenido de nuevo, ' + username + '!');
             submenu(); //redigiendo a submenu()
         } catch (err) {
             // Si hay un error, se muestra en pantalla y se vuelve a llamar a login()
             console.log(err.message)
-            login();
+            loginMain();
         }
       });
     });
@@ -205,6 +218,53 @@ async function directMessageMain() {
       });
     });
   }
+
+  async function changeStatusMain() {
+    console.log("\nCHANGE STATUS:");
+    console.log("Choose an option for 'show':");
+    console.log("[1] Available");
+    console.log("[2] Away");
+    console.log("[3] Not Available");
+    console.log("[4] Busy");
+    console.log("[5] Online");
+  
+    rl.question("Opcioon -> ", async (answer) => {
+      let showOption;
+      switch (answer) {
+        case '1':
+          showOption = "available";
+          break;
+        case '2':
+          showOption = "away";
+          break;
+        case '3':
+          showOption = "not available";
+          break;
+        case '4':
+          showOption = "busy";
+          break;
+        case '5':
+          showOption = "offline";
+          break;
+        default:
+          console.log("Opcion Invalida! Intente de nuevo.");
+          changeStatusMain();
+          return;
+      }
+  
+      rl.question("Ingresar mensaje de status (opcional): ", async (status) => {
+        try {
+          await client.changeStatus(showOption, status);
+          console.log("Status updated successfully!");
+          submenu();
+        } catch (err) {
+          console.log("Error updating status:", err.message);
+          submenu();
+        }
+      });
+    });
+  }
+  
 
 //corremos el programa
 main();
