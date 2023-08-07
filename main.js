@@ -175,7 +175,7 @@ async function logoutMain() {
  */
 async function getContactsMain() {
     try {
-        // llamar a la funcion con los parametros
+        // llamar a la funcion 
         const contacts = await client.getContacts();
 
         console.log("\nCONTACTOS (ROSTER LIST):");
@@ -197,6 +197,22 @@ async function getContactsMain() {
         submenu();
       }
 }
+
+async function addContactMain() {
+    rl.question("JID del usuario: ", async (jid) => {
+      rl.question("Nombre del usuario (opcional): ", async (nombre) => {
+        try {
+          await client.addContact(jid, nombre);
+          console.log("Contacto " + jid + " agregado correctamente."
+          );
+          submenu();
+        } catch (err) {
+          console.log("Error al agregar el contacto:", err.message);
+          submenu();
+        }
+      });
+    });
+  }
 
 /**
  * directMessage: llama a client.directMessage() con los paremetros necesarios
