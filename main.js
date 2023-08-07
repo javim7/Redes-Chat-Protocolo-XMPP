@@ -83,7 +83,7 @@ function menu() {
             getContactsMain();
             break;
         case '2':
-          // Add a user to contacts
+            addContactMain();
             break;
         case '3':
           // Show contact details of a user
@@ -174,45 +174,42 @@ async function logoutMain() {
  * getContactsMain: llama a client.getContacts() con los paremetros necesarios
  */
 async function getContactsMain() {
-    try {
-        // llamar a la funcion 
-        const contacts = await client.getContacts();
+  try {
+    console.log("\nCONTACTOS (ROSTER LIST):");
+    // llamar a la funcion 
+    const contacts = await client.getContacts();
 
-        console.log("\nCONTACTOS (ROSTER LIST):");
-
-        // Si no hay contactos, se muestra un mensaje
-        if (contacts.length === 0) {
-          console.log("\nNo se encontraron contactos.");
-        } else {
-            // Si hay contactos, se muestran en pantalla
-          for (const contact of contacts) {
-            console.log()
-            console.log(`${contact.name || contact.jid}`);
-          }
-        }
-        submenu();
-      } catch (err) {
-        // Si hay un error, se muestra en pantalla y se vuelve a llamar a getContactsMain()
-        console.log(err.message);
-        submenu();
+    // Si no hay contactos, se muestra un mensaje
+    if (contacts.length === 0) {
+      console.log("\nNo se encontraron contactos.");
+    } else {
+      // Si hay contactos, se muestran en pantalla
+      for (const contact of contacts) {
+        console.log(`- JID: ${contact.jid}, Nombre: ${contact.name}, Suscripción: ${contact.subscription}, Estado: ${contact.status}`);
       }
+    }
+    submenu();
+  } catch (err) {
+    // Si hay un error, se muestra en pantalla y se vuelve a llamar a getContactsMain()
+    console.log(err.message);
+    submenu();
+  }
 }
 
 async function addContactMain() {
-    rl.question("JID del usuario: ", async (jid) => {
-      rl.question("Nombre del usuario (opcional): ", async (nombre) => {
-        try {
-          await client.addContact(jid, nombre);
-          console.log("Contacto " + jid + " agregado correctamente."
-          );
-          submenu();
-        } catch (err) {
-          console.log("Error al agregar el contacto:", err.message);
-          submenu();
-        }
-      });
-    });
-  }
+  console.log("\nAGREGAR CONTACTO:");
+  rl.question("Nombre de usuario: ", async (nombre) => {
+    const jid = nombre + "@alumchat.xyz";
+    try {
+      await client.addContact(jid, nombre);
+      console.log(`Solicitud de agregar contacto ${jid} enviada al servidor.`);
+    } catch (err) {
+      console.error('Error al agregar el contacto:', err);
+    }
+    submenu();
+  });
+}
+
 
 /**
  * directMessage: llama a client.directMessage() con los paremetros necesarios
@@ -237,14 +234,13 @@ async function directMessageMain() {
 
   async function changeStatusMain() {
     console.log("\nCHANGE STATUS:");
-    console.log("Choose an option for 'show':");
     console.log("[1] Available");
     console.log("[2] Away");
     console.log("[3] Not Available");
     console.log("[4] Busy");
     console.log("[5] Online");
   
-    rl.question("Opcioon -> ", async (answer) => {
+    rl.question("Opcion -> ", async (answer) => {
       let showOption;
       switch (answer) {
         case '1':

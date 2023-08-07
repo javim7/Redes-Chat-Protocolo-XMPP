@@ -117,51 +117,56 @@ class Client {
   }
 
   async getContacts() {
-    if (!this.xmpp) {
-      throw new Error("Error in connection, please try again.");
-    }
-
-    const rosterStanza = xml(
-      'iq',
-      { type: 'get', id: 'roster' },
-      xml('query', { xmlns: 'jabber:iq:roster' })
-    );
-
-    this.xmpp.send(rosterStanza).then(() => {
-      console.log('Solicitud de roster enviada al servidor.');
-    }).catch((err) => {
-      console.error('Error al enviar la solicitud de roster:', err);
-    });
-  
-    // Evento para recibir la respuesta del roster del servidor
-    this.xmpp.on('stanza', (stanza) => {
-      if (stanza.is('iq') && stanza.attrs.type === 'result') {
-        const query = stanza.getChild('query', 'jabber:iq:roster');
-        const contacts = query.getChildren('item');
-  
-        console.log('\nLista de contactos:');
-        contacts.forEach((contact) => {
-          const jid = contact.attrs.jid;
-          const name = contact.attrs.name || jid;
-          const subscription = contact.attrs.subscription;
-  
-          // Obtener el estado de presencia del contacto (si está disponible)
-          const presence = this.xmpp.presences && this.xmpp.presences[jid];
-          const status = presence && presence.status ? presence.status : 'Offline';
-
-          console.log(`- JID: ${jid}, Nombre: ${name}, Suscripción: ${subscription}, Estado: ${status}`);
-        });
-  
-        this.xmpp.on('presence', (presence) => {
-          const from = presence.attrs.from;
-          const show = presence.getChildText('show');
-          const status = presence.getChildText('status');
-  
-          console.log(`Presencia recibida de ${from}: show=${show}, status=${status}`);
-        });
+    return new Promise((resolve, reject) => {
+      if (!this.xmpp) {
+        reject(new Error("Error in connection, please try again."));
       }
+  
+      const rosterStanza = xml(
+        'iq',
+        { type: 'get', id: 'roster' },
+        xml('query', { xmlns: 'jabber:iq:roster' })
+      );
+  
+      this.xmpp.send(rosterStanza).then(() => {
+        console.log('Solicitud de roster enviada al servidor.');
+      }).catch((err) => {
+        console.error('Error al enviar la solicitud de roster:', err);
+      });
+  
+      // Evento para recibir la respuesta del roster del servidor
+      this.xmpp.on('stanza', (stanza) => {
+        if (stanza.is('iq') && stanza.attrs.type === 'result') {
+          const query = stanza.getChild('query', 'jabber:iq:roster');
+          const contacts = query.getChildren('item');
+  
+          console.log('\nLista de contactos:');
+          let contactList = [];
+          contacts.forEach((contact) => {
+            const jid = contact.attrs.jid;
+            const name = contact.attrs.name || jid;
+            const subscription = contact.attrs.subscription;
+  
+            // Obtener el estado de presencia del contacto (si está disponible)
+            const presence = this.xmpp.presences && this.xmpp.presences[jid];
+            const status = presence && presence.status ? presence.status : 'Offline';
+  
+            // console.log(`- JID: ${jid}, Nombre: ${name}, Suscripción: ${subscription}, Estado: ${status}`);
+            contactList.push({jid, name, subscription, status});
+          });
+  
+          this.xmpp.on('presence', (presence) => {
+            const from = presence.attrs.from;
+            const show = presence.getChildText('show');
+            const status = presence.getChildText('status');
+  
+            console.log(`Presencia recibida de ${from}: show=${show}, status=${status}`);
+          });
+          resolve(contactList);
+        }
+      });
     });
-  }
+  }  
 
   /**
    * addContact: agrega un nuevo contacto al roster.
@@ -173,7 +178,6 @@ class Client {
       throw new Error("Error in connection, please try again.");
     }
   
-    // Construir el IQ stanza para agregar un nuevo contacto
     const addContactStanza = xml(
       'iq',
       { type: 'set', id: 'addContact' },
@@ -182,14 +186,8 @@ class Client {
       )
     );
   
-    try {
-      // Enviar el IQ stanza para agregar el nuevo contacto
-      await this.xmpp.send(addContactStanza);
-      console.log(`Contacto ${jid} agregado correctamente.`);
-    } catch (err) {
-      console.error('Error al agregar el contacto:', err);
-    }
-  }
+    return this.xmpp.send(addContactStanza);
+  }  
   
 
   /**
@@ -223,7 +221,12 @@ class Client {
       xml("status", {}, status)
     );
 
-    await this.xmpp.send(statusStanza);
+    // Enviar el IQ stanza al servidor
+    this.xmpp.send(statusStanza).then(() => {
+      console.log(`Solicitud de cambiar estado enviada al servidor.`);
+    }).catch((err) => {
+      console.error('Error al enviar la solicitud de cambiar estado:', err);
+    });
   }
 }
 
