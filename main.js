@@ -12,7 +12,7 @@ const Client = require("./client");
 const readline = require('readline');
 
 // Creamos la interfaz para leer datos del usuario.
-const rl = readline.createInterface({
+let rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
 });
@@ -52,6 +52,7 @@ function menu() {
             logoutMain();
             break;
         case '4':
+            deleteAccountMain();
             break;
         default:
             console.log('Opcion invalida! Intente de nuevo!');
@@ -86,26 +87,26 @@ function menu() {
             addContactMain();
             break;
         case '3':
-          // Show contact details of a user
-              break;
+            getContactMain();
+            break;
         case '4':
-            directMessageMain();
-             break;
+            oneOnOneChatMain();
+            break;
         case '5':
-          // Participate in group conversations
-             break;
+            groupChatMain();
+            break;
         case '6':
-          changeStatusMain();
-          break;
+            changeStatusMain();
+            break;
         case '7':
-          // Send/receive notifications
-             break;
+            // Send/receive notifications
+            break;
         case '8':
-          // Send/receive files
-             break;
+            // Send/receive files
+            break;
         case '9':
-             menu();
-             break;
+            menu();
+            break;
         default:
             console.log('Opcion invalida! Intente de nuevo!');
             submenu();
@@ -128,7 +129,7 @@ async function registerMain() {
             loginMain(); //regresar al menu principal
           } catch (err) {
             // Si hay un error, se muestra en pantalla y se vuelve a llamar a register()
-            console.log(err.message);
+            console.log("\nError: " + err.message);
             menu();
           }
         });
@@ -157,6 +158,9 @@ async function loginMain() {
     });
   }
 
+/**
+ * logout: cierra sesion en el servidor
+ */
 async function logoutMain() {
     try {
         await client.logout();
@@ -169,6 +173,21 @@ async function logoutMain() {
       }
 }
 
+/**
+ * deleteAccount: elimina la cuenta del usuario en el servidor
+ */
+async function deleteAccountMain() {
+  console.log("\nELIMINAR CUENTA:");
+  try {
+    const username = client.username;
+    await client.deleteAccount();
+    console.log("\nCuenta " + username + " eliminada exitosamente!");
+    main(); //regresar al menu principal
+  } catch (err) {
+    console.log("\nError al eliminar la cuenta:", err.message);
+    menu(); // regresar al menu principal
+  }
+}
 
 /**
  * getContactsMain: llama a client.getContacts() con los paremetros necesarios
@@ -196,12 +215,34 @@ async function getContactsMain() {
   }
 }
 
+/**
+ * getContactMain: llama a client.getContact() con los paremetros necesarios
+ */
+async function getContactMain() {
+  console.log("\nDETALLES DE CONTACTO:");
+  rl.question("Nombre de usuario: ", async (nombre) => {
+    const jid = nombre + "@alumchat.xyz";
+    try {
+      // llamar a la funcion con los parametros
+      const contact = await client.getContact(jid);
+      console.log(`\n- JID: ${contact.jid}, Nombre: ${contact.name}, Suscripción: ${contact.subscription}, Estado: ${contact.status}`);
+    } catch (err) {
+      console.log("\nError al obtener el contacto:", err.message);
+    }
+    submenu();
+  });
+}
+
+/**
+ * addContactMain: llama a client.addContact() con los paremetros necesarios
+ */
 async function addContactMain() {
   console.log("\nAGREGAR CONTACTO:");
   rl.question("Nombre de usuario: ", async (nombre) => {
     const jid = nombre + "@alumchat.xyz";
     try {
-      await client.addContact(jid, nombre);
+      await client.addContact(jid);
+      
       console.log(`Solicitud de agregar contacto ${jid} enviada al servidor.`);
     } catch (err) {
       console.error('Error al agregar el contacto:', err);
@@ -210,53 +251,151 @@ async function addContactMain() {
   });
 }
 
+async function oneOnOneChatMain() {
+  console.log("\nCOMUNICACION 1 A 1:");
+  rl.question("Nombre de usuario: ", async (nombre) => {
+    const jid = nombre + "@alumchat.xyz";
+    console.log(`Iniciando chat con ${jid}...`);
+    console.log("\nEscriba 'exit' para salir del chat.");
+    console.log("Escriba 'file' para enviar un archivo.\n");
+
+    // Listen for incoming messages from the specified user
+    client.xmpp.on('stanza', (stanza) => {
+      // console.log(`Received stanza: ${stanza.toString()}`);
+      if (stanza.is('message') && stanza.attrs.type === 'chat' && stanza.attrs.from.startsWith(jid)) {
+        const body = stanza.getChild('body');
+        if (body) {
+          const message = body.text();
+          console.log(`${nombre}: ${message}`);
+        }
+      }
+    });
+
+    // Listen for user input
+    rl.on('line', async (line) => {
+      if (line === 'exit') {
+        rl.close();
+        submenu();
+        return;
+      } else if (line === 'file') {
+        rl.question('Ruta del archivo: ', async filePath => {
+          try {
+            await client.sendFile(jid, filePath);
+            console.log('Archivo enviado exitosamente!');
+          } catch (err) {
+            console.log('Error:', err.message);
+          }
+        });
+      } else {
+        await client.directMessage(jid, line);
+      }
+    });
+
+    // Prompt the user to enter a message
+    rl.setPrompt('Mensaje: ');
+    rl.prompt();
+  });
+}
 
 /**
- * directMessage: llama a client.directMessage() con los paremetros necesarios
+ * groupChat: desplaza las opciones disponibles para chatear en un grupo
  */
-async function directMessageMain() {
-    console.log('\nCOMUNICACION 1 A 1:');
-    rl.question('Destinatario: ', async receiver => {
-        receiver = receiver + '@alumchat.xyz';
-      rl.question('Mensaje: ', async message => {
+async function groupChatMain() {
+  console.log('\nPARTICIPAR EN CONVERSACIONES GRUPALES:');
+  console.log('[1] Crear un grupo');
+  console.log('[2] Chatear en un grupo existente');
+  rl.question('Opcion: ', async option => {
+    if (option === '1') {
+      // Create a new group
+      rl.question('\nNombre del grupo: ', async groupName => {
+        groupJid = groupName + '@conference.alumchat.xyz';
         try {
-          // llamar a la funcion con los parametros
-          await client.directMessage(receiver, message);
-          console.log('\nMensaje enviado correctamente!');
-          submenu();
+          await client.createGroup(groupJid);
+          console.log(`Grupo ${groupName} creado exitosamente!`);
+          await groupChatMain2(groupJid);
         } catch (err) {
-          console.log('\nError al enviar el mensaje:', err.message);
+          console.log('Error:', err.message);
           submenu();
         }
       });
-    });
-  }
+    } else if (option === '2') {
+      // Chat in an existing group
+      rl.question('\nNombre del grupo: ', async groupName => {
+        groupJid = groupName + '@conference.alumchat.xyz';
+        try {
+          await groupChatMain2(groupJid);
+        } catch (err) {
+          console.log('Error:', err.message);
+          submenu();
+        }
+      });
+    } else {
+      console.log('Opcion invalida! Intente de nuevo.');
+      groupChatMain();
+    }
+  });
+}
 
-  async function changeStatusMain() {
-    console.log("\nCHANGE STATUS:");
+/**
+ * groupChatMain2: logra hacer el broadcast del grupo
+ * @param {String} groupName: nombre del grupo
+ */
+async function groupChatMain2(groupName) {
+  console.log(`\nCHAT GRUPAL: ${groupName}`);
+  console.log("Escriba 'exit' para salir del chat.");
+  console.log("Escriba 'invite' para invitar a un usuario al grupo.\n");
+
+  // Listen for incoming messages from the group
+  client.onGroupMessage(groupName, (from, message) => {
+    console.log(`${from}: ${message}`);
+  });
+
+  // Listen for user input
+  rl.on('line', async line => {
+    if (line === 'exit') {
+      submenu();
+      return;
+    } else if (line === 'invite') {
+      rl.question('\nNombre de usuario a invitar: ', async username => {
+        userJid = username + '@alumchat.xyz';
+        await client.inviteToGroup(groupName, userJid);
+        console.log(`Invitacion enviada a ${username}!`);
+      });
+    } else {
+      await client.directMessage(groupName, line);
+    }
+  });
+
+  // Prompt the user to enter a message
+  rl.setPrompt('Mensaje: ');
+  rl.prompt();
+}
+
+async function changeStatusMain() {
+    console.log("\nDEFINIR PRESENCIA:");
     console.log("[1] Available");
     console.log("[2] Away");
-    console.log("[3] Not Available");
-    console.log("[4] Busy");
-    console.log("[5] Online");
+    console.log("[3] Extended Away");
+    console.log("[4] Do Not Disturb");
+    console.log("[5] Free to Chat");
   
     rl.question("Opcion -> ", async (answer) => {
       let showOption;
       switch (answer) {
         case '1':
-          showOption = "available";
+          showOption = "";
           break;
         case '2':
           showOption = "away";
           break;
         case '3':
-          showOption = "not available";
+          showOption = "xa";
           break;
         case '4':
-          showOption = "busy";
+          showOption = "dnd";
           break;
         case '5':
-          showOption = "offline";
+          showOption = "chat";
           break;
         default:
           console.log("Opcion Invalida! Intente de nuevo.");
@@ -267,16 +406,14 @@ async function directMessageMain() {
       rl.question("Ingresar mensaje de status (opcional): ", async (status) => {
         try {
           await client.changeStatus(showOption, status);
-          console.log("Status updated successfully!");
-          submenu();
+          console.log("Presencia definida con exito!");
         } catch (err) {
-          console.log("Error updating status:", err.message);
-          submenu();
+          console.log("Error:", err.message);
         }
+        submenu();
       });
     });
-  }
+  }  
   
-
 //corremos el programa
 main();

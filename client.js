@@ -32,47 +32,43 @@ class Client {
    * @param {String} password 
    */
   async register(username, password, email) {
-    if (this.xmpp && this.xmpp.status === "online") {
-      throw new Error("You are already connected. Cannot register while connected.");
-    }
-
-    const registerStanza = xml(
-      "iq",
-      { type: "set" },
-      xml("query", { xmlns: "jabber:iq:register" }, [
-        xml("username", {}, username),
-        xml("password", {}, password),
-        xml("email", {}, email),
-      ])
-    );
-
-    this.xmpp = client({
-      service: this.service,
-      domain: this.domain,
-      username: username,
-      password: password,
-    });
-
-    this.xmpp.on("online", async () => {
-      await this.xmpp.send(xml("presence"));
-    });
-
-    try {
-      await this.xmpp.start();
-      await this.xmpp.send(registerStanza);
-    }
-    catch (err) {
-      if (err.condition === 'conflict') {
-        throw new Error('\nEl usuario ya existe!');
-      } else {
-        throw err;
+    return new Promise(async (resolve, reject) => {
+      if (this.xmpp) {
+        reject(new Error('Ya existe una conexión.'));
       }
-    }
-    finally {
-      await this.xmpp.stop();
-      this.xmpp = null;
-    }
-  }
+  
+      this.username = username;
+      this.password = password;
+      this.xmpp = client({
+        service: this.service,
+        domain: this.domain,
+        username: this.username,
+        password: this.password,
+      });
+  
+      try {
+        await this.xmpp.start();
+      } catch (err) {
+        reject(new Error('Error al establecer la conexión.'));
+      }
+  
+      const registerStanza = xml(
+        'iq',
+        { type: 'set', id: 'register' },
+        xml('query', { xmlns: 'jabber:iq:register' },
+          xml('username', {}, username),
+          xml('password', {}, password),
+          xml('email', {}, email)
+        )
+      );
+  
+      this.xmpp.send(registerStanza).then(() => {
+        resolve();
+      }).catch((err) => {
+        reject(new Error('Error al registrar el usuario.'));
+      });
+    });
+  }   
 
   /**
    * login: conecta al cliente XMPP al servidor.
@@ -80,11 +76,13 @@ class Client {
    * @param {String} password
    */
   async login(username, password) {
+    this.username = username;
+    this.password = password;
     this.xmpp = client({
       service: this.service,
       domain: this.domain,
-      username: username,
-      password: password,
+      username: this.username,
+      password: this.password,
     });
   
     this.xmpp.on("online", async () => {
@@ -116,10 +114,43 @@ class Client {
     this.password = null;
   }
 
-  async getContacts() {
+  /**
+   * deleteAccount: elimina la cuenta del usuario del servidor.
+   */
+  async deleteAccount() {
     return new Promise((resolve, reject) => {
       if (!this.xmpp) {
         reject(new Error("Error in connection, please try again."));
+      }
+  
+      const deleteStanza = xml(
+        'iq',
+        { type: 'set', id: 'delete' },
+        xml('query', { xmlns: 'jabber:iq:register' },
+          xml('remove')
+        )
+      );
+  
+      this.xmpp.send(deleteStanza).then(async () => {
+        await this.xmpp.stop();
+        this.xmpp = null;
+        this.username = null;
+        this.password = null;
+        resolve();
+      }).catch((err) => {
+        reject(new Error('Error al eliminar la cuenta.'));
+      });
+  
+      this.xmpp.on('error', (err) => {
+        // Handle any errors that might occur
+      });
+    });
+  }   
+
+  async getContacts() {
+    return new Promise((resolve, reject) => {
+      if (!this.xmpp) {
+        reject(new Error("Error en conexion, intente de nuevo."));
       }
   
       const rosterStanza = xml(
@@ -128,41 +159,86 @@ class Client {
         xml('query', { xmlns: 'jabber:iq:roster' })
       );
   
-      this.xmpp.send(rosterStanza).then(() => {
-        console.log('Solicitud de roster enviada al servidor.');
-      }).catch((err) => {
-        console.error('Error al enviar la solicitud de roster:', err);
+      this.xmpp.send(rosterStanza).catch((err) => {
+        reject(new Error('Error al enviar la solicitud de roster.'));
       });
   
       // Evento para recibir la respuesta del roster del servidor
       this.xmpp.on('stanza', (stanza) => {
         if (stanza.is('iq') && stanza.attrs.type === 'result') {
           const query = stanza.getChild('query', 'jabber:iq:roster');
-          const contacts = query.getChildren('item');
+          if (query) {
+            const contacts = query.getChildren('item');
   
-          console.log('\nLista de contactos:');
-          let contactList = [];
-          contacts.forEach((contact) => {
-            const jid = contact.attrs.jid;
-            const name = contact.attrs.name || jid;
-            const subscription = contact.attrs.subscription;
+            let contactList = [];
+            contacts.forEach((contact) => {
+              const jid = contact.attrs.jid;
+              const name = contact.attrs.name || jid;
+              const subscription = contact.attrs.subscription;
   
-            // Obtener el estado de presencia del contacto (si está disponible)
-            const presence = this.xmpp.presences && this.xmpp.presences[jid];
-            const status = presence && presence.status ? presence.status : 'Offline';
+              // Obtener el estado de presencia del contacto (si está disponible)
+              const presence = this.xmpp.presences && this.xmpp.presences[jid];
+              const status = presence && presence.status ? presence.status : 'Offline';
   
-            // console.log(`- JID: ${jid}, Nombre: ${name}, Suscripción: ${subscription}, Estado: ${status}`);
-            contactList.push({jid, name, subscription, status});
-          });
+              contactList.push({jid, name, subscription, status});
+            });
   
-          this.xmpp.on('presence', (presence) => {
-            const from = presence.attrs.from;
-            const show = presence.getChildText('show');
-            const status = presence.getChildText('status');
+            resolve(contactList);
+          }
+        }
+      });
+    });
+  }   
   
-            console.log(`Presencia recibida de ${from}: show=${show}, status=${status}`);
-          });
-          resolve(contactList);
+  /**
+   * getContact: obtiene la informacion de un contacto en especifico.
+   * @param {String} user: nombre de usuario del contacto que se desea obtener. 
+   * @returns 
+   */
+  async getContact(jid) {
+    return new Promise((resolve, reject) => {
+      if (!this.xmpp) {
+        reject(new Error("Error en conexion, intente de nuevo."));
+      }
+  
+      const rosterStanza = xml(
+        'iq',
+        { type: 'get', id: 'roster' },
+        xml('query', { xmlns: 'jabber:iq:roster' })
+      );
+  
+      this.xmpp.send(rosterStanza).catch((err) => {
+        reject(new Error('Error al enviar la solicitud de roster.'));
+      });
+  
+      // Evento para recibir la respuesta del roster del servidor
+      this.xmpp.on('stanza', (stanza) => {
+        if (stanza.is('iq') && stanza.attrs.type === 'result') {
+          const query = stanza.getChild('query', 'jabber:iq:roster');
+          if (query) {
+            const contacts = query.getChildren('item');
+  
+            let contactList = [];
+            contacts.forEach((contact) => {
+              if (contact.attrs.jid === jid) {
+                const jid = contact.attrs.jid;
+                const name = contact.attrs.name || jid;
+                const subscription = contact.attrs.subscription;
+  
+                // Obtener el estado de presencia del contacto (si está disponible)
+                const presence = this.xmpp.presences && this.xmpp.presences[jid];
+                const status = presence && presence.status ? presence.status : 'Offline';
+  
+                contactList.push({jid, name, subscription, status});
+              }
+            });
+  
+            if (contactList.length === 0) {
+              reject(new Error(`No se encontró un contacto con el JID ${jid}.`));
+            } else {
+              resolve(contactList[0]);
+            }
+          }
         }
       });
     });
@@ -173,22 +249,39 @@ class Client {
    * @param jid 
    * @param nombre 
    */
-  async addContact(jid, nombre) {
-    if (!this.xmpp) {
-      throw new Error("Error in connection, please try again.");
-    }
+
+  async addContact(jid) {
+    return new Promise(async (resolve, reject) => {
+      if (!this.xmpp) {
+        reject(new Error("Error in connection, please try again."));
+      }
   
-    const addContactStanza = xml(
-      'iq',
-      { type: 'set', id: 'addContact' },
-      xml('query', { xmlns: 'jabber:iq:roster' },
-        xml('item', { jid: jid, name: nombre })
-      )
-    );
+      const addStanza = xml(
+        'iq',
+        { type: 'set', id: 'add' },
+        xml('query', { xmlns: 'jabber:iq:roster' },
+          xml('item', { jid: jid })
+        )
+      );
   
-    return this.xmpp.send(addContactStanza);
+      this.xmpp.send(addStanza).then(async () => {
+        // Enviar una solicitud de suscripción al contacto
+        const presenceStanza = xml(
+          'presence',
+          { type: 'subscribe', to: jid }
+        );
+        await this.xmpp.send(presenceStanza);
+
+        //enviar mensaje incial
+        const message = "Hello, I am " + this.username + ".";
+        await this.directMessage(jid, message);
+        
+        resolve();
+      }).catch((err) => {
+        reject(new Error('Error al agregar el contacto.'));
+      });
+    });
   }  
-  
 
   /**
    * directMessage: envía un mensaje a un destinatario.
@@ -209,39 +302,121 @@ class Client {
     await this.xmpp.send(messageStanza);
   }
 
-  async changeStatus(show, status = "") {
-    if (!this.xmpp) {
-      throw new Error("Error en la conexion, intenta de nuevo.");
-    }
-
-    const statusStanza = xml(
-      "presence",
-      {},
-      xml("show", {}, show),
-      xml("status", {}, status)
+  /**
+   * createGroup: crea un nuevo grupo.
+   * @param {*} groupName 
+   */
+  async createGroup(groupName) {
+    // const mucJid = `${groupName}@conference.${this.domain}`;
+  
+    // Create the MUC room
+    const presence = xml(
+      'presence',
+      { to: `${groupName}/${this.username}` },
+      xml('x', { xmlns: 'http://jabber.org/protocol/muc' })
     );
+    await this.xmpp.send(presence);
+  
+    // Configure the MUC room
+    const iq = xml(
+      'iq',
+      { type: 'set', to: groupName },
+      xml(
+        'query',
+        { xmlns: 'http://jabber.org/protocol/muc#owner' },
+        xml(
+          'x',
+          { xmlns: 'jabber:x:data', type: 'submit' },
+          [
+            xml(
+              'field',
+              { var: 'FORM_TYPE', type: 'hidden' },
+              xml('value', {}, 'http://jabber.org/protocol/muc#roomconfig')
+            ),
+            xml(
+              'field',
+              { var: 'muc#roomconfig_membersonly' },
+              xml('value', {}, '1')
+            ),
+          ]
+        )
+      )
+    );
+    await this.xmpp.send(iq);
+  
+    // Send a welcome message
+    // const message = "Bienvenidos al grupo " + groupName + ".";
+    // await this.directMessage(groupName, message);
+  }  
+  
+  /**
+   * inviteToGroup: invita a un usuario a unirse a un grupo.
+   * @param {*} groupName 
+   * @param {*} username 
+   */
+  async inviteToGroup(groupName, username) {
+    const invite = xml(
+      'message',
+      { to: groupName },
+      xml(
+        'x',
+        { xmlns: 'http://jabber.org/protocol/muc#user' },
+        xml(
+          'invite',
+          { to: `${username}` },
+          xml('reason', {}, `Join our group: ${groupName}`)
+        )
+      )
+    );
+    await this.xmpp.send(invite);
+  }  
 
-    // Enviar el IQ stanza al servidor
-    this.xmpp.send(statusStanza).then(() => {
-      console.log(`Solicitud de cambiar estado enviada al servidor.`);
-    }).catch((err) => {
-      console.error('Error al enviar la solicitud de cambiar estado:', err);
+  /**
+   * onGroupMessage: recibe un mensaje de un grupo.
+   * @param {*} groupName: nombre del grupo
+   * @param {*} callback: funcion que se ejecuta cuando se recibe un mensaje de grupo
+   */
+  onGroupMessage(groupName, callback) {
+    const mucJid = `${groupName}@conference.${this.domain}`;
+    this.xmpp.on('message', msg => {
+      if (msg.attrs.from.startsWith(mucJid) && msg.getChild('body')) {
+        const from = msg.attrs.from.split('/')[1];
+        const message = msg.getChildText('body');
+        callback(from, message);
+      }
     });
-  }
+  }  
+
+  /**
+   * changeStatus: cambia el estado de presencia del usuario.
+   * @param {*} show: available, away, xa, dnd, chat
+   * @param {*} status: mensaje de estado
+   * @returns 
+   */
+  async changeStatus(show, status = "") {
+    return new Promise((resolve, reject) => {
+      if (!this.xmpp) {
+        reject(new Error("Error in connection, please try again."));
+      }
+  
+      const statusStanza = xml(
+        "presence",
+        {},
+        xml("show", {}, show),
+        xml("status", {}, status)
+      );
+  
+      // Send the IQ stanza to the server
+      this.xmpp.send(statusStanza).then(() => {
+        console.log(`\nCambio de presencia enviado.`);
+        resolve();
+      }).catch((err) => {
+        console.error('Error:', err);
+        reject(err);
+      });
+    });
+  }   
+
 }
 
 module.exports = Client;
-
-// async function ejemplogetContacts() {
-//   const cliente = new Client();
-//   cliente.username = "mom20067";
-//   cliente.password = "varcelona";
-//   await cliente.connect();
-
-//   const contacts = await cliente.getContacts();
-//   console.log(contacts);
-// }
-
-// ejemplogetContacts().catch((error) => {
-//   console.error("Error al obtener contactos:", error);
-// });
