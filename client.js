@@ -301,6 +301,20 @@ class Client {
 
     await this.xmpp.send(messageStanza);
   }
+  
+  async chatMessage(groupName, mensaje) {
+    if (!this.xmpp) {
+      throw new Error("Error en la conexion, intenta de nuevo.");
+    }
+
+    const messageStanza = xml(
+      "message",
+      { type: "groupchat", to: groupName },
+      xml("body", {}, mensaje)
+    );
+
+    await this.xmpp.send(messageStanza);
+  }
 
   /**
    * createGroup: crea un nuevo grupo.
@@ -345,8 +359,8 @@ class Client {
     await this.xmpp.send(iq);
   
     // Send a welcome message
-    // const message = "Bienvenidos al grupo " + groupName + ".";
-    // await this.directMessage(groupName, message);
+    const message = "Bienvenidos al grupo " + groupName + ".";
+    await this.chatMessage(groupName, message);
   }  
   
   /**
@@ -377,12 +391,15 @@ class Client {
    * @param {*} callback: funcion que se ejecuta cuando se recibe un mensaje de grupo
    */
   onGroupMessage(groupName, callback) {
-    const mucJid = `${groupName}@conference.${this.domain}`;
-    this.xmpp.on('message', msg => {
-      if (msg.attrs.from.startsWith(mucJid) && msg.getChild('body')) {
-        const from = msg.attrs.from.split('/')[1];
-        const message = msg.getChildText('body');
-        callback(from, message);
+    this.xmpp.on('stanza', async (stanza) => {
+      // console.log(stanza.toString)
+      if (stanza.is('message') && stanza.attrs.type === 'groupchat') {
+        const from = stanza.attrs.from.split('/')[1];
+        const message = stanza.getChildText('body');
+
+        if(from && message && !from.startsWith(this.username)) {
+          callback(from, message);
+        }
       }
     });
   }  

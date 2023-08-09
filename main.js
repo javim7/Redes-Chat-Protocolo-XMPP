@@ -121,18 +121,17 @@ async function registerMain() {
     console.log('\nREGISTRARSE:');
     rl.question('Usuario: ', async username => {
       rl.question('Contraseña: ', async password => {
-        rl.question('Correo: ', async email => {
-          try {
-            // llamar a la funcion con los parametros
-            await client.register(username, password, email);
-            console.log('\nRegistro exitoso. Ahora puedes iniciar sesión con tus credenciales.');
-            loginMain(); //regresar al menu principal
-          } catch (err) {
-            // Si hay un error, se muestra en pantalla y se vuelve a llamar a register()
-            console.log("\nError: " + err.message);
-            menu();
-          }
-        });
+        const email = username + '@alumchat.xyz';
+        try {
+          // llamar a la funcion con los parametros
+          await client.register(username, password, email);
+          console.log('\nRegistro exitoso. Ahora puedes iniciar sesión con tus credenciales.');
+          loginMain(); //regresar al menu principal
+        } catch (err) {
+          // Si hay un error, se muestra en pantalla y se vuelve a llamar a register()
+          console.log("\nError: " + err.message);
+          menu();
+        }
       });
     });
 }
@@ -353,6 +352,8 @@ async function groupChatMain2(groupName) {
   // Listen for user input
   rl.on('line', async line => {
     if (line === 'exit') {
+      // rl.close();
+      console.log('Saliendo del chat grupal...')
       submenu();
       return;
     } else if (line === 'invite') {
@@ -362,7 +363,7 @@ async function groupChatMain2(groupName) {
         console.log(`Invitacion enviada a ${username}!`);
       });
     } else {
-      await client.directMessage(groupName, line);
+      await client.chatMessage(groupName, line);
     }
   });
 
