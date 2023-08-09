@@ -386,6 +386,78 @@ class Client {
   }  
 
   /**
+   * joinGroupChat: se une a un grupo existente.
+   * @param {*} roomJid 
+   */
+  async joinGroup(groupJid) {
+    try {
+      const presence = xml(
+        'presence',
+        { to: `${groupJid}/${this.username}` },
+        xml('x', { xmlns: 'http://jabber.org/protocol/muc' })
+      );
+      await this.xmpp.send(presence);
+  
+      // Retrieve old messages from the group chat
+      const oldMessages = await this.retrieveGroupChatHistory(groupJid);
+      for (const message of oldMessages) {
+        console.log(`${message.from}: ${message.body}`);
+      }
+  
+      this.xmpp.on('stanza', async (stanza) => {
+        if (stanza.is('message') && stanza.getChild('body')) {
+          if (stanza.attrs.type === "groupchat") {
+            const from = stanza.attrs.from;
+            const body = stanza.getChildText("body");
+            if (from && body) {
+              console.log(`${from}: ${body}`);
+            }
+          }
+        }
+      });
+    } catch (err) {
+      console.log('Error:', err.message);
+    }
+  }
+  
+  async retrieveGroupChatHistory(groupJid) {
+    // Discover a MAM service
+    const disco = await this.xmpp.discoverServices();
+    const mamService = disco.find(
+      service => service.discoInfo.features.includes('urn:xmpp:mam:2')
+    );
+    if (!mamService) {
+      throw new Error('No MAM service found');
+    }
+  
+    // Query the MAM service for archived messages
+    const iq = xml(
+      'iq',
+      { type: 'set', to: mamService.jid },
+      xml(
+        'query',
+        { xmlns: 'urn:xmpp:mam:2' },
+        xml('x', { xmlns: 'jabber:x:data', type: 'submit' },
+          xml('field', { var: 'FORM_TYPE', type: 'hidden' },
+            xml('value', {}, 'urn:xmpp:mam:2')
+          ),
+          xml('field', { var: 'with' },
+            xml('value', {}, groupJid)
+          )
+        )
+      )
+    );
+    const response = await this.xmpp.sendIq(iq);
+    const forwardedMessages = response.getChild('fin').getChildren('forwarded');
+    return forwardedMessages.map(forwarded => {
+      const message = forwarded.getChild('message');
+      const from = message.attrs.from;
+      const body = message.getChildText('body');
+      return { from, body };
+    });
+  }  
+
+  /**
    * onGroupMessage: recibe un mensaje de un grupo.
    * @param {*} groupName: nombre del grupo
    * @param {*} callback: funcion que se ejecuta cuando se recibe un mensaje de grupo

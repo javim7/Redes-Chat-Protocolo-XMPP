@@ -203,7 +203,7 @@ async function getContactsMain() {
     } else {
       // Si hay contactos, se muestran en pantalla
       for (const contact of contacts) {
-        console.log(`- JID: ${contact.jid}, Nombre: ${contact.name}, Suscripción: ${contact.subscription}, Estado: ${contact.status}`);
+        console.log(`- JID: ${contact.jid}, Estado: ${contact.status}`);
       }
     }
     submenu();
@@ -322,6 +322,7 @@ async function groupChatMain() {
       rl.question('\nNombre del grupo: ', async groupName => {
         groupJid = groupName + '@conference.alumchat.xyz';
         try {
+          await client.joinGroup(groupJid);
           await groupChatMain2(groupJid);
         } catch (err) {
           console.log('Error:', err.message);
@@ -342,7 +343,8 @@ async function groupChatMain() {
 async function groupChatMain2(groupName) {
   console.log(`\nCHAT GRUPAL: ${groupName}`);
   console.log("Escriba 'exit' para salir del chat.");
-  console.log("Escriba 'invite' para invitar a un usuario al grupo.\n");
+  console.log("Escriba 'invite' para invitar a un usuario al grupo.");
+  console.log("Escriba 'file' para enviar un archivo.\n")
 
   // Listen for incoming messages from the group
   client.onGroupMessage(groupName, (from, message) => {
