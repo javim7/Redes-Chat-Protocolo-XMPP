@@ -11,6 +11,10 @@
 
 const { client, xml } = require("@xmpp/client");
 const debug = require("@xmpp/debug");
+const fs = require('fs');
+const path = require('path');
+const mime = require('mime-types');
+const { v4: uuidv4 } = require('uuid');
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
@@ -24,6 +28,8 @@ class Client {
     this.service = "xmpp://alumchat.xyz:5222";
     this.domain = "alumchat.xyz";
     this.xmpp = null;
+    this.notifictions = [];
+
   }
 
   /**
@@ -91,6 +97,7 @@ class Client {
   
     try {
       await this.xmpp.start();
+      this.handleStanza();
     } catch (err) {
       if (err.condition === 'not-authorized') {
         throw new Error('\nCredenciales incorrectas! Intente de nuevo.');
@@ -188,7 +195,48 @@ class Client {
         }
       });
     });
-  }   
+  }  
+
+  updatePresence(jid, show, status) {
+    if (!this.xmpp.presences) {
+      this.xmpp.presences = {};
+    }
+    if (!this.xmpp.presences[jid]) {
+      this.xmpp.presences[jid] = {};
+    }
+    this.xmpp.presences[jid].show = show;
+    this.xmpp.presences[jid].status = status;
+  }
+
+  async getPresence(jid) {
+    return new Promise((resolve, reject) => {
+      if (!this.xmpp) {
+        reject(new Error("Error en conexion, intente de nuevo."));
+      }
+  
+      const probeStanza = xml(
+        'presence',
+        { type: 'probe', to: jid }
+      );
+  
+      this.xmpp.send(probeStanza).then(() => {
+      }).catch((err) => {
+        console.error('Error sending presence probe:', err);
+        reject(new Error('Error al enviar la solicitud de presencia.'));
+      });
+      this.xmpp.on('stanza', (stanza) => {
+        if (stanza.is('presence')) {
+          // console.log("hola")
+          const from = stanza.attrs.from;
+          const jid = from.split('/')[0];
+          const show = stanza.getChildText('show');
+          const status = stanza.getChildText('status');
+          // this.updatePresence(jid, show, status);
+          resolve({show, status});
+        }
+      });
+    });
+  }  
   
   /**
    * getContact: obtiene la informacion de un contacto en especifico.
@@ -404,17 +452,17 @@ class Client {
         console.log(`${message.from}: ${message.body}`);
       }
   
-      this.xmpp.on('stanza', async (stanza) => {
-        if (stanza.is('message') && stanza.getChild('body')) {
-          if (stanza.attrs.type === "groupchat") {
-            const from = stanza.attrs.from;
-            const body = stanza.getChildText("body");
-            if (from && body) {
-              console.log(`${from}: ${body}`);
-            }
-          }
-        }
-      });
+      // this.xmpp.on('stanza', async (stanza) => {
+      //   if (stanza.is('message') && stanza.getChild('body')) {
+      //     if (stanza.attrs.type === "groupchat") {
+      //       const from = stanza.attrs.from;
+      //       const body = stanza.getChildText("body");
+      //       if (from && body) {
+      //         console.log(`${from}: ${body}`);
+      //       }
+      //     }
+      //   }
+      // });
     } catch (err) {
       console.log('Error:', err.message);
     }
@@ -505,6 +553,110 @@ class Client {
       });
     });
   }   
+
+  async sendFile(to, filePath) {
+    // Read the file data
+    const fileData = await fs.promises.readFile(filePath);
+    const fileName = path.basename(filePath);
+    const fileSize = fileData.length;
+    const mimeType = mime.lookup(filePath);
+  
+    // Generate a unique session ID for the file transfer
+    const sid = uuidv4();
+  
+    // Send a stream initiation request to the recipient
+    const siStanza = xml(
+      'iq',
+      { type: 'set', to, id: sid },
+      xml(
+        'si',
+        { xmlns: 'http://jabber.org/protocol/si', id: sid, profile: 'http://jabber.org/protocol/si/profile/file-transfer' },
+        xml(
+          'file',
+          { xmlns: 'http://jabber.org/protocol/si/profile/file-transfer', name: fileName, size: fileSize },
+          xml('desc', {}, `Sending file ${fileName}`),
+          xml('range')
+        ),
+        xml(
+          'feature',
+          { xmlns: 'http://jabber.org/protocol/feature-neg' },
+          xml(
+            'x',
+            { xmlns: 'jabber:x:data', type: 'form' },
+            xml('field', { var: 'stream-method', type: 'list-single' },
+              xml('option', {}, xml('value', {}, 'http://jabber.org/protocol/bytestreams')),
+              xml('option', {}, xml('value', {}, 'http://jabber.org/protocol/ibb'))
+            )
+          )
+        )
+      )
+    );
+    await this.xmpp.send(siStanza);
+  
+    // Open an in-band bytestream to send the file data
+    const blockSize = 4096;
+    const openStanza = xml(
+      'iq',
+      { type: 'set', to, id: sid },
+      xml(
+        'open',
+        { xmlns: 'http://jabber.org/protocol/ibb', sid, 'block-size': blockSize, stanza: 'iq' }
+      )
+    );
+    await this.xmpp.send(openStanza);
+  
+    // Send the file data as a series of data packets
+    let seq = 0;
+    for (let i = 0; i < fileSize; i += blockSize) {
+      const data = fileData.slice(i, i + blockSize);
+      const dataStanza = xml(
+        'iq',
+        { type: 'set', to, id: sid },
+        xml(
+          'data',
+          { xmlns: 'http://jabber.org/protocol/ibb', sid, seq },
+          data.toString('base64')
+        )
+      );
+      await this.xmpp.send(dataStanza);
+      seq++;
+    }
+  
+    // Close the in-band bytestream
+    const closeStanza = xml(
+      'iq',
+      { type: 'set', to, id: sid },
+      xml(
+        'close',
+        { xmlns: 'http://jabber.org/protocol/ibb', sid }
+      )
+    );
+    await this.xmpp.send(closeStanza);
+  }
+  
+  handleStanza() {
+      this.xmpp.on('stanza', (stanza) => {
+      if (stanza.is('message')) {
+        const from = stanza.attrs.from;
+        const jid = from.split('/')[0];
+        const type = stanza.attrs.type;
+        if (type === 'chat') {
+          console.log(`New message from ${jid}`);
+        } else if (type === 'groupchat') {
+          const groupName = jid.split('@')[0];
+          console.log(`${jid} sent a message in ${groupName}`);
+        }
+      } else if (stanza.is('presence')) {
+        const from = stanza.attrs.from;
+        const jid = from.split('/')[0];
+        const type = stanza.attrs.type;
+        if (type === 'subscribe') {
+          console.log(`Contact request from ${jid}`);
+          this.notifications.push({ type: 'contactRequest', from: jid });
+        }
+      }
+    });
+  }  
 
 }
 

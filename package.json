@@ -13,12 +13,16 @@
     "@xmpp/client": "^0.13.1",
     "@xmpp/debug": "^0.13.0",
     "dotenv": "^16.3.1",
+    "fs": "^0.0.1-security",
     "js-base64": "^3.7.5",
+    "mime-types": "^2.1.35",
     "node-xmpp-client": "^3.2.0",
+    "path": "^0.12.7",
     "simple-xmpp": "^2.3.1",
     "stanza": "^12.18.0",
     "stanza.io": "^10.3.4",
     "strophe.js": "^1.6.2",
-    "tls": "^0.0.1"
+    "tls": "^0.0.1",
+    "uuid": "^9.0.0"
   }
 }

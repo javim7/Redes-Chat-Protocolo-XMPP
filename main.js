@@ -102,7 +102,7 @@ function menu() {
             // Send/receive notifications
             break;
         case '8':
-            // Send/receive files
+            seeNotifications();
             break;
         case '9':
             menu();
@@ -203,7 +203,7 @@ async function getContactsMain() {
     } else {
       // Si hay contactos, se muestran en pantalla
       for (const contact of contacts) {
-        console.log(`- JID: ${contact.jid}, Estado: ${contact.status}`);
+        console.log(`- JID: ${contact.jid}, Status: ${contact.status}`);
       }
     }
     submenu();
@@ -273,7 +273,7 @@ async function oneOnOneChatMain() {
     // Listen for user input
     rl.on('line', async (line) => {
       if (line === 'exit') {
-        rl.close();
+        console.log('Saliendo del chat...')
         submenu();
         return;
       } else if (line === 'file') {
@@ -417,6 +417,10 @@ async function changeStatusMain() {
       });
     });
   }  
+
+  function seeNotifications() {
+    client.viewNotifications();
+  }
   
 //corremos el programa
 main();
