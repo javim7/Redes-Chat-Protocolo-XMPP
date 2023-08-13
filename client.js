@@ -5,14 +5,22 @@
  * @author Javier Mombiela
  * @contact mom20067@uvg.edu.gt
  * @created 2023-07-25
+ * 
  * @requires xmpp/client
  * @requires xmpp/debug
+ * @requires fs
+ * @requires path
+ * @requires url
+ * @requires https
+ * @requires readline
  */
 
 const { client, xml } = require("@xmpp/client");
 const debug = require("@xmpp/debug");
 const fs = require('fs');
 const path = require('path');
+const url = require('url');
+const https = require('https');
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
@@ -26,7 +34,8 @@ class Client {
     this.service = "xmpp://alumchat.xyz:5222";
     this.domain = "alumchat.xyz";
     this.xmpp = null;
-    this.notifictions = [];
+    this.notifications = new Set();
+    this.receiveNotifications = true;
 
   }
 
@@ -95,7 +104,7 @@ class Client {
   
     try {
       await this.xmpp.start();
-      // this.handleStanza();
+      this.listenForStanzas();
     } catch (err) {
       if (err.condition === 'not-authorized') {
         throw new Error('\nCredenciales incorrectas! Intente de nuevo.');
@@ -200,54 +209,79 @@ class Client {
   }  
 
   /**
-   * updatePresence: actualiza el estado de presencia de un contacto.
-   * @param {string} jid : id del contacto
-   * @param {string} show : estado de presencia
-   * @param {string} status : mensaje de estado
-   */
-  updatePresence(jid, show, status) {
-    if (!this.xmpp.presences) {
-      this.xmpp.presences = {};
-    }
-    if (!this.xmpp.presences[jid]) {
-      this.xmpp.presences[jid] = {};
-    }
-    this.xmpp.presences[jid].show = show;
-    this.xmpp.presences[jid].status = status;
-  }
-
-  /**
    * getPresence: obtiene el estado de presencia de un contacto.
    * @param {string} jid 
    * @returns show, status
    */
-  async getPresence(jid) {
+  async getPresence(jid, timeout = 2000, delay = 500) {
     return new Promise((resolve, reject) => {
       if (!this.xmpp) {
         reject(new Error("Error en conexion, intente de nuevo."));
       }
   
       const probeStanza = xml(
-        'presence',
-        { type: 'probe', to: jid }
+        "presence",
+        { type: "probe", to: jid }
       );
   
-      this.xmpp.send(probeStanza).then(() => {
-      }).catch((err) => {
-        console.error('Error sending presence probe:', err);
-        reject(new Error('Error al enviar la solicitud de presencia.'));
-      });
-      this.xmpp.on('stanza', (stanza) => {
-        if (stanza.is('presence')) {
-          // console.log("hola")
+      this.xmpp
+        .send(probeStanza)
+        .then(() => {
+          // console.log("Presence probe sent successfully");
+        })
+        .catch((err) => {
+          console.error("Error sending presence probe:", err);
+          reject(new Error("Error al enviar la solicitud de presencia."));
+        });
+  
+      const timeoutId = setTimeout(() => {
+        reject(new Error("Timeout al recibir la presencia del servidor."));
+      }, timeout);
+  
+      let presence = null;
+  
+      this.xmpp.on("stanza", (stanza) => {
+        if (stanza.is("presence")) {
+          // console.log("Received presence stanza:", stanza.toString());
           const from = stanza.attrs.from;
-          const jid = from.split('/')[0];
-          const show = stanza.getChildText('show');
-          const status = stanza.getChildText('status');
-          // this.updatePresence(jid, show, status);
-          resolve({show, status});
+          const fromJid = from.split("/")[0];
+          if (fromJid === jid) {
+            clearTimeout(timeoutId);
+            if (stanza.attrs.type === "unavailable") {
+              presence = { show: "unavailable", status: null };
+            } else {
+              let show = stanza.getChildText("show");
+              const status = stanza.getChildText("status");
+  
+              // Only set presence if show or status is present
+              if (show || status) {
+                // console.log("show:", show)
+                if(show === null || show === undefined || show === "") {
+                  show = "Available";
+                }
+                else if(show === "away"){
+                  show = "Away";
+                } else if(show === "xa"){
+                  show = "Not Available";
+                } else if(show === "dnd"){
+                  show = "Busy";
+                } else if (show === "unavailable") {
+                  show = "Offline";
+                }
+                presence = { show, status };
+              }
+            }
+          }
+        } else if (stanza.is("iq") && stanza.attrs.type === "error") {
+          console.log("Received error stanza:", stanza.toString());
+          clearTimeout(timeoutId);
+          reject(new Error("Error al recibir la presencia del servidor."));
         }
       });
+  
+      setTimeout(() => {
+        resolve(presence || { show: "Available", status: null });
+      }, delay);
     });
   }  
   
@@ -285,6 +319,7 @@ class Client {
                 const jid = contact.attrs.jid;
                 const name = contact.attrs.name || jid;
                 const subscription = contact.attrs.subscription;
+                console.log(subscription)
   
                 // Obtener el estado de presencia del contacto (si está disponible)
                 const presence = this.xmpp.presences && this.xmpp.presences[jid];
@@ -340,6 +375,49 @@ class Client {
         reject(new Error('Error al agregar el contacto.'));
       });
     });
+  } 
+  
+  /**
+   * handleContactRequests: acepta o elimina solicitudes de amistad pendientes.
+   * @param {String} fromJid: nombre de usuario del contacto que envió la solicitud.
+   * @param {Boolean} accept: true si se acepta la solicitud, false si se elimina.
+   */
+  async handleContactRequest(fromJid, accept) {
+    let fromJId2 = fromJid + "@" + this.domain;
+    if (!this.xmpp) {
+      throw new Error("Error in connection, please try again.");
+    }
+    
+    const stanza = Array.from(this.notifications).find(notification =>
+      notification.includes(`Nueva solicitud de amistad de: ${fromJid}`)
+    );
+
+    if (accept) {
+      const presence = xml('presence', { to: fromJId2, type: 'subscribed' });
+      this.xmpp.send(presence);
+      console.log(`\nSolicitud de amistad de ${fromJid} aceptada.`);
+    } else {
+      const presence = xml('presence', { to: fromJId2, type: 'unsubscribed' });
+      this.xmpp.send(presence);
+      console.log(`\nSolicitud de amistad de ${fromJid} eliminada.`);
+    }
+
+    if (stanza) {
+      this.notifications.delete(stanza);
+    }
+
+  }  
+
+  async getContactRequests() {
+    if (!this.xmpp) {
+      throw new Error("Error in connection, please try again.");
+    }
+  
+    const presenceStanzas = Array.from(this.notifications).filter(notification =>
+      notification.includes("Nueva solicitud de amistad de:")
+    );
+  
+    return presenceStanzas;
   }  
 
   /**
@@ -529,7 +607,52 @@ class Client {
         }
       }
     });
+  }
+  
+  /**
+   * handleGroupInvite: acepta o rechaza una invitacion a un grupo.
+   * @param {String} fromJid : Jid del grupo
+   * @param {Boolean} accept: ver si se acepto o no la invitacion
+   */
+  async handleGroupInvite(fromJid, accept) {
+    if (!this.xmpp) {
+      throw new Error("Error in connection, please try again.");
+    }
+  
+    const stanza = Array.from(this.notifications).find(notification =>
+      notification.includes(`Nueva invitación de grupo de: ${fromJid}`)
+    );
+  
+    if (accept) {
+      const presence = xml('presence', { to: fromJid, type: 'subscribed' });
+      this.xmpp.send(presence);
+      console.log(`Invitación de grupo de ${fromJid} aceptada.`);
+    } else {
+      const presence = xml('presence', { to: fromJid, type: 'unsubscribed' });
+      this.xmpp.send(presence);
+      console.log(`Invitación de grupo de ${fromJid} eliminada.`);
+    }
+  
+    if (stanza) {
+      this.notifications.delete(stanza);
+    }
   }  
+
+  /**
+   * getInviteRequests: obtiene las invitaciones a grupos.
+   * @param {Array} invites: lista de invitaciones a grupos
+   */
+  async getInviteRequests() {
+    if (!this.xmpp) {
+      throw new Error("Error in connection, please try again.");
+    }
+  
+    const invites = Array.from(this.notifications).filter(notification =>
+      notification.includes("Nueva invitación de grupo de:")
+    );
+  
+    return invites;
+  }
 
   /**
    * changeStatus: cambia el estado de presencia del usuario.
@@ -567,47 +690,117 @@ class Client {
    */
   async sendFile(destinatario, filePath) {
     if (!this.xmpp) {
-      throw new Error('Error en la conexión, intenta de nuevo.');
+      throw new Error("Error en la conexion, intenta de nuevo.");
     }
-  
-    try {
-      const fileBuffer = await fs.readFile(filePath);
-      const fileBase64 = fileBuffer.toString('base64');
-      const fileName = path.basename(filePath);
-  
-      const fileStanza = xml(
-        'message',
-        { type: 'chat', to: destinatario },
-        xml('body', {}, fileName),
-        xml('file', { xmlns: 'urn:xmpp:file-transfer' }, fileBase64)
+
+    // Read the file data
+    const fileData = fs.readFileSync(filePath);
+    const fileName = path.basename(filePath);
+    const fileSize = fileData.byteLength;
+
+    // Request a slot from the server
+    const slot = await this.requestSlot(fileName, fileSize);
+
+    // Upload the file to the server
+    await this.uploadFile(slot, fileData);
+
+    // Send the URL to the recipient
+    const messageStanza = xml(
+      "message",
+      { type: "chat", to: destinatario },
+      xml("body", {}, `Archivo enviado: ${slot.get.url}`),
+      xml(
+        "x",
+        { xmlns: "jabber:x:oob" },
+        xml("url", {}, slot.get.url),
+        xml("desc", {}, fileName)
+      )
+    );
+
+    await this.xmpp.send(messageStanza);
+  }
+
+  async requestSlot(fileName, fileSize) {
+    console.log("entro")
+    return new Promise((resolve, reject) => {
+      const iqStanza = xml(
+        'iq',
+        { type: 'get', to: 'upload.alumchat.xyz' },
+        xml('request', { xmlns: 'urn:xmpp:http:upload:0', filename: fileName, size: fileSize })
       );
   
-      await this.xmpp.send(fileStanza);
-    } catch (err) {
-      throw new Error('Error al enviar el archivo: ' + err.message);
-    }
-  }  
+      this.xmpp.send(iqStanza)
+        .then((result) => {
+          console.log('Raw response:', result); // Debug output
   
-  handleStanza() {
-      this.xmpp.on('stanza', (stanza) => {
-      if (stanza.is('message')) {
-        const from = stanza.attrs.from;
-        const jid = from.split('/')[0];
-        const type = stanza.attrs.type;
-        if (type === 'chat') {
-          console.log(`New message from ${jid}`);
-        } else if (type === 'groupchat') {
-          const groupName = jid.split('@')[0];
-          console.log(`${jid} sent a message in ${groupName}`);
+          const slot = result.getChild('slot', 'urn:xmpp:http:upload:0');
+          if (slot) {
+            resolve(slot);
+          } else {
+            reject(new Error('No se pudo obtener el slot del servidor.'));
+          }
+        })
+        .catch((err) => {
+          reject(err);
+        });
+    });
+  }  
+
+  async uploadFile(slot, fileData) {
+    return new Promise((resolve, reject) => {
+      const putUrl = slot.getChild("put").attrs.url;
+      const options = url.parse(putUrl);
+      options.method = "PUT";
+      options.headers = {
+        "Content-Type": "application/octet-stream",
+        "Content-Length": fileData.byteLength,
+      };
+
+      const req = https.request(options, (res) => {
+        if (res.statusCode === 201) {
+          resolve();
+        } else {
+          reject(new Error(`Error al subir el archivo. Codigo de estado: ${res.statusCode}`));
         }
-      } else if (stanza.is('presence')) {
-        const from = stanza.attrs.from;
-        const jid = from.split('/')[0];
+      });
+
+      req.on("error", (err) => {
+        reject(err);
+      });
+
+      req.write(fileData);
+      req.end();
+    });
+  } 
+
+  /**
+   * listenForStanzas: escucha los mensajes entrantes y los anade a la lista de notificaciones.
+   */
+  listenForStanzas() {
+    if (!this.xmpp) {
+      throw new Error("Error in connection, please try again.");
+    }
+  
+    this.xmpp.on("stanza", (stanza) => {
+      if (stanza.is("message") && this.receiveNotifications) {
+        // console.log(stanza.toString());
         const type = stanza.attrs.type;
-        if (type === 'subscribe') {
-          console.log(`Contact request from ${jid}`);
-          this.notifications.push({ type: 'contactRequest', from: jid });
+        const from = stanza.attrs.from;
+        const body = stanza.getChildText("body");
+  
+        if (type === "chat" && body) {
+          console.log(`Nuevo mensaje de ${from.split("@")[0]}: ${body}`);
+        } else if (type === "groupchat" && body) {
+          const jid = from.split("/")[1];
+          const groupname = from.split("@")[0];
+          console.log(`Nuevo mensaje de ${jid} en grupo ${groupname}: ${body}`);
+        } else if (from.includes("@conference")) {
+          console.log(`Nueva invitación de grupo de: ${from.split("@")[0]}`);
+          this.notifications.add(`Nueva invitación de grupo de: ${from.split("@")[0]}`);
         }
+      } else if (stanza.is("presence") && stanza.attrs.type === "subscribe") {
+        console.log(`Nueva solicitud de amistad de: ${stanza.attrs.from.split("@")[0]}`);
+        this.notifications.add(`Nueva solicitud de amistad de: ${stanza.attrs.from.split("@")[0]}`);
       }
     });
   }  

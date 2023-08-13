@@ -73,7 +73,7 @@ function menu() {
     console.log('[4] Comunicación 1 a 1 con cualquier usuario/contacto');
     console.log('[5] Participar en conversaciones grupales');
     console.log('[6] Definir mensaje de presencia');
-    console.log('[7] Enviar/recibir notificaciones');
+    console.log('[7] Ver notificaciones');
     console.log('[8] Enviar/recibir archivos');
     console.log('[9] Regresar al menu principal');
     
@@ -99,10 +99,10 @@ function menu() {
             changeStatusMain();
             break;
         case '7':
-            // Send/receive notifications
+            viewNotificationsMain();
             break;
         case '8':
-            seeNotifications();
+            
             break;
         case '9':
             menu();
@@ -194,25 +194,40 @@ async function deleteAccountMain() {
 async function getContactsMain() {
   try {
     console.log("\nCONTACTOS (ROSTER LIST):");
-    // llamar a la funcion 
     const contacts = await client.getContacts();
 
-    // Si no hay contactos, se muestra un mensaje
     if (contacts.length === 0) {
       console.log("\nNo se encontraron contactos.");
     } else {
-      // Si hay contactos, se muestran en pantalla
+      const columnWidth = 40;
+      console.log(
+        `- ${pad("JID", columnWidth)}${pad("Estado", columnWidth)}Mensaje`
+      );
+
       for (const contact of contacts) {
-        console.log(`- JID: ${contact.jid}, Status: ${contact.status}`);
+        try {
+          const presence = await client.getPresence(contact.jid);
+          const show = presence.show || "Available";
+          const status = presence.status || "---";
+          console.log(
+            `- ${pad(contact.jid, columnWidth)}${pad(show, columnWidth)}${status}`
+          );
+        } catch (err) {
+          console.log(`- ${pad(contact.jid, columnWidth)}${pad("Available", columnWidth)}`);
+        }
       }
     }
     submenu();
   } catch (err) {
-    // Si hay un error, se muestra en pantalla y se vuelve a llamar a getContactsMain()
     console.log(err.message);
     submenu();
   }
 }
+
+function pad(str, width, padChar = " ") {
+  return str.padEnd(width, padChar).slice(0, width);
+}
+
 
 /**
  * getContactMain: llama a client.getContact() con los paremetros necesarios
@@ -224,7 +239,8 @@ async function getContactMain() {
     try {
       // llamar a la funcion con los parametros
       const contact = await client.getContact(jid);
-      console.log(`\n- JID: ${contact.jid}, Nombre: ${contact.name}, Suscripción: ${contact.subscription}, Estado: ${contact.status}`);
+      const presence = await client.getPresence(jid);
+      console.log(`\n- JID: ${contact.jid}, Nombre: ${contact.name}, Suscripción: ${contact.subscription}, Estado: ${presence.show}, Mensaje: ${presence.status}`);
     } catch (err) {
       console.log("\nError al obtener el contacto:", err.message);
     }
@@ -236,17 +252,61 @@ async function getContactMain() {
  * addContactMain: llama a client.addContact() con los paremetros necesarios
  */
 async function addContactMain() {
-  console.log("\nAGREGAR CONTACTO:");
-  rl.question("Nombre de usuario: ", async (nombre) => {
-    const jid = nombre + "@alumchat.xyz";
-    try {
-      await client.addContact(jid);
-      
-      console.log(`Solicitud de agregar contacto ${jid} enviada al servidor.`);
-    } catch (err) {
-      console.error('Error al agregar el contacto:', err);
+  console.log("\nGESTIONAR CONTACTOS:");
+  console.log("[1] Agregar contacto");
+  console.log("[2] Aceptar solicitudes de contacto");
+
+  rl.question("Opción -> ", async (answer) => {
+    if (answer === '1') {
+      rl.question("Nombre de usuario: ", async (nombre) => {
+        const jid = nombre + "@alumchat.xyz";
+        try {
+          await client.addContact(jid);
+          console.log(`Solicitud de agregar contacto ${jid} enviada al servidor.`);
+        } catch (err) {
+          console.error('Error al agregar el contacto:', err);
+        }
+        submenu();
+      });
+    } else if (answer === '2') {
+      try {
+        const requests = await client.getContactRequests();
+        if (requests.length === 0) {
+          console.log("No hay solicitudes de amistad pendientes.");
+          submenu();
+          return;
+        }
+
+        console.log("\nSolicitudes de amistad pendientes:");
+        for (let i = 0; i < requests.length; i++) {
+          console.log(`[${i + 1}] ${requests[i]}`);
+        }
+
+        rl.question("Elija el número de la solicitud que desea aceptar o eliminar: ", async (answer) => {
+          const index = parseInt(answer) - 1;
+
+          if (isNaN(index) || index < 0 || index >= requests.length) {
+            console.log("Número inválido. Intente de nuevo.");
+            addContactMain();
+            return;
+          }
+
+          const request = requests[index];
+          const fromJid = request.match(/Nueva solicitud de amistad de: (.+)/)[1];
+          rl.question(`¿Desea aceptar la solicitud de ${fromJid}? (s/n): `, async (answer) => {
+            const accept = answer.toLowerCase() === 's';
+            await client.handleContactRequest(fromJid, accept);
+            submenu();
+          });
+        });
+      } catch (err) {
+        console.error('Error al aceptar usuarios:', err);
+        submenu();
+      }
+    } else {
+      console.log("Opción inválida. Intente de nuevo.");
+      addContactMain();
     }
-    submenu();
   });
 }
 
@@ -255,13 +315,14 @@ async function addContactMain() {
  */
 async function oneOnOneChatMain() {
   console.log("\nCOMUNICACION 1 A 1:");
+  client.receiveNotifications = false;
   rl.question("Nombre de usuario: ", async (nombre) => {
     const jid = nombre + "@alumchat.xyz";
     console.log(`Iniciando chat con ${jid}...`);
     console.log("\nEscriba 'exit' para salir del chat.");
     console.log("Escriba 'file' para enviar un archivo.\n");
 
-    // Listen for incoming messages from the specified user
+    // escucha poor mensajes entrantes
     client.xmpp.on('stanza', (stanza) => {
       // console.log(`Received stanza: ${stanza.toString()}`);
       if (stanza.is('message') && stanza.attrs.type === 'chat' && stanza.attrs.from.startsWith(jid)) {
@@ -276,12 +337,14 @@ async function oneOnOneChatMain() {
     //recibir input
     rl.on('line', async (line) => {
       if (line === 'exit') {
+        client.receiveNotifications = true;
         console.log('Saliendo del chat...')
         submenu();
         return;
       } else if (line === 'file') {
         rl.question('Ruta del archivo: ', async (filePath) => {
           try {
+            await client.checkHttpUploadSupport();
             await client.sendFile(jid, filePath);
             console.log('Archivo enviado exitosamente!');
           } catch (err) {
@@ -305,6 +368,7 @@ async function groupChatMain() {
   console.log('\nPARTICIPAR EN CONVERSACIONES GRUPALES:');
   console.log('[1] Crear un grupo');
   console.log('[2] Chatear en un grupo existente');
+  console.log('[3] Aceptar invitaciones de grupo');
   rl.question('Opcion: ', async option => {
     if (option === '1') {
       // Create a new group
@@ -331,6 +395,43 @@ async function groupChatMain() {
           submenu();
         }
       });
+    } else if (option === '3') {
+      // Accept group invites
+      try {
+        const invites = await client.getInviteRequests();
+        if (invites.length === 0) {
+          console.log("\nNo hay invitaciones de grupo pendientes.");
+          submenu();
+          return;
+        }
+
+        console.log("\nInvitaciones de grupo pendientes:");
+        for (let i = 0; i < invites.length; i++) {
+          console.log(`[${i + 1}] ${invites[i]}`);
+        }
+
+        rl.question("Elija el número de la invitación que desea aceptar o eliminar: ", async (answer) => {
+          const index = parseInt(answer) - 1;
+
+          if (isNaN(index) || index < 0 || index >= invites.length) {
+            console.log("Número inválido. Intente de nuevo.");
+            groupChatMain();
+            return;
+          }
+
+          const invite = invites[index];
+          const fromJid = invite.match(/Nueva invitación de grupo de: (.+)/)[1];
+          rl.question(`¿Desea aceptar la invitación de ${fromJid}? (s/n): `, async (answer) => {
+            const accept = answer.toLowerCase() === 's';
+            await client.handleGroupInvite(fromJid, accept);
+            await client.joinGroup(fromJid);
+            await groupChatMain2(fromJid);
+          });
+        });
+      } catch (err) {
+        console.error('Error al aceptar invitaciones:', err);
+        submenu();
+      }
     } else {
       console.log('Opcion invalida! Intente de nuevo.');
       groupChatMain();
@@ -344,6 +445,7 @@ async function groupChatMain() {
  */
 async function groupChatMain2(groupName) {
   console.log(`\nCHAT GRUPAL: ${groupName}`);
+  client.receiveNotifications = false;
   console.log("Escriba 'exit' para salir del chat.");
   console.log("Escriba 'invite' para invitar a un usuario al grupo.");
   console.log("Escriba 'file' para enviar un archivo.\n")
@@ -357,6 +459,7 @@ async function groupChatMain2(groupName) {
   rl.on('line', async line => {
     if (line === 'exit') {
       // rl.close();
+      client.receiveNotifications = true;
       console.log('Saliendo del chat grupal...')
       submenu();
       return;
@@ -382,9 +485,9 @@ async function changeStatusMain() {
     console.log("\nDEFINIR PRESENCIA:");
     console.log("[1] Available");
     console.log("[2] Away");
-    console.log("[3] Extended Away");
-    console.log("[4] Do Not Disturb");
-    console.log("[5] Free to Chat");
+    console.log("[3] Not Available");
+    console.log("[4] Busy");
+    console.log("[5] Offline");
   
     rl.question("Opcion -> ", async (answer) => {
       let showOption;
@@ -402,7 +505,7 @@ async function changeStatusMain() {
           showOption = "dnd";
           break;
         case '5':
-          showOption = "chat";
+          showOption = "unavailable";
           break;
         default:
           console.log("Opcion Invalida! Intente de nuevo.");
@@ -422,8 +525,16 @@ async function changeStatusMain() {
     });
   }  
 
-  function seeNotifications() {
-    client.viewNotifications();
+  function viewNotificationsMain() {
+    console.log("\nNOTIFICACIONES:");
+    if (client.notifications.size === 0) {
+      console.log("No tienes notificaciones.");
+    } else {
+      for(notification of client.notifications) {
+        console.log(notification);
+      }
+    }
+    submenu();
   }
   
 //corremos el programa

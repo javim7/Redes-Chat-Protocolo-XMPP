@@ -14,6 +14,7 @@
     "@xmpp/debug": "^0.13.0",
     "dotenv": "^16.3.1",
     "fs": "^0.0.1-security",
+    "https": "^1.0.0",
     "js-base64": "^3.7.5",
     "mime-types": "^2.1.35",
     "node-xmpp-client": "^3.2.0",
@@ -23,6 +24,7 @@
     "stanza.io": "^10.3.4",
     "strophe.js": "^1.6.2",
     "tls": "^0.0.1",
+    "url": "^0.11.1",
     "uuid": "^9.0.0"
   }
 }
