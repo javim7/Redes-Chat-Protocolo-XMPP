@@ -250,6 +250,9 @@ async function addContactMain() {
   });
 }
 
+/**
+ * oneOnOneChatMain: habilita la opcion de poder chatear con un usuario
+ */
 async function oneOnOneChatMain() {
   console.log("\nCOMUNICACION 1 A 1:");
   rl.question("Nombre de usuario: ", async (nombre) => {
@@ -270,14 +273,14 @@ async function oneOnOneChatMain() {
       }
     });
 
-    // Listen for user input
+    //recibir input
     rl.on('line', async (line) => {
       if (line === 'exit') {
         console.log('Saliendo del chat...')
         submenu();
         return;
       } else if (line === 'file') {
-        rl.question('Ruta del archivo: ', async filePath => {
+        rl.question('Ruta del archivo: ', async (filePath) => {
           try {
             await client.sendFile(jid, filePath);
             console.log('Archivo enviado exitosamente!');
@@ -290,7 +293,6 @@ async function oneOnOneChatMain() {
       }
     });
 
-    // Prompt the user to enter a message
     rl.setPrompt('Mensaje: ');
     rl.prompt();
   });
@@ -346,12 +348,12 @@ async function groupChatMain2(groupName) {
   console.log("Escriba 'invite' para invitar a un usuario al grupo.");
   console.log("Escriba 'file' para enviar un archivo.\n")
 
-  // Listen for incoming messages from the group
+  //escucha por mensajes entrantes
   client.onGroupMessage(groupName, (from, message) => {
     console.log(`${from}: ${message}`);
   });
 
-  // Listen for user input
+  //input de usuario
   rl.on('line', async line => {
     if (line === 'exit') {
       // rl.close();
@@ -369,11 +371,13 @@ async function groupChatMain2(groupName) {
     }
   });
 
-  // Prompt the user to enter a message
   rl.setPrompt('Mensaje: ');
   rl.prompt();
 }
 
+/**
+ * changeStatusMain: despliega las opciones para cambiar el estado del usuario
+ */
 async function changeStatusMain() {
     console.log("\nDEFINIR PRESENCIA:");
     console.log("[1] Available");

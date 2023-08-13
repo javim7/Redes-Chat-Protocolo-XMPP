@@ -13,8 +13,6 @@ const { client, xml } = require("@xmpp/client");
 const debug = require("@xmpp/debug");
 const fs = require('fs');
 const path = require('path');
-const mime = require('mime-types');
-const { v4: uuidv4 } = require('uuid');
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
@@ -97,7 +95,7 @@ class Client {
   
     try {
       await this.xmpp.start();
-      this.handleStanza();
+      // this.handleStanza();
     } catch (err) {
       if (err.condition === 'not-authorized') {
         throw new Error('\nCredenciales incorrectas! Intente de nuevo.');
@@ -149,11 +147,15 @@ class Client {
       });
   
       this.xmpp.on('error', (err) => {
-        // Handle any errors that might occur
+        console.log('Error al eliminar la cuenta.');
       });
     });
   }   
 
+  /**
+   * getContacts: obtiene la lista de contactos del usuario.
+   * @returns lista de contactos
+   */
   async getContacts() {
     return new Promise((resolve, reject) => {
       if (!this.xmpp) {
@@ -197,6 +199,12 @@ class Client {
     });
   }  
 
+  /**
+   * updatePresence: actualiza el estado de presencia de un contacto.
+   * @param {string} jid : id del contacto
+   * @param {string} show : estado de presencia
+   * @param {string} status : mensaje de estado
+   */
   updatePresence(jid, show, status) {
     if (!this.xmpp.presences) {
       this.xmpp.presences = {};
@@ -208,6 +216,11 @@ class Client {
     this.xmpp.presences[jid].status = status;
   }
 
+  /**
+   * getPresence: obtiene el estado de presencia de un contacto.
+   * @param {string} jid 
+   * @returns show, status
+   */
   async getPresence(jid) {
     return new Promise((resolve, reject) => {
       if (!this.xmpp) {
@@ -294,10 +307,8 @@ class Client {
 
   /**
    * addContact: agrega un nuevo contacto al roster.
-   * @param jid 
-   * @param nombre 
+   * @param {string} jid: nombre de usuario del contacto que se desea agregar.
    */
-
   async addContact(jid) {
     return new Promise(async (resolve, reject) => {
       if (!this.xmpp) {
@@ -350,6 +361,11 @@ class Client {
     await this.xmpp.send(messageStanza);
   }
   
+  /**
+   * chatMessage: envía un mensaje a un grupo.
+   * @param {string} groupName : nombre del grupo al que se desea enviar el mensaje.
+   * @param {string} mensaje : mensaje que se desea enviar.
+   */
   async chatMessage(groupName, mensaje) {
     if (!this.xmpp) {
       throw new Error("Error en la conexion, intenta de nuevo.");
@@ -366,20 +382,19 @@ class Client {
 
   /**
    * createGroup: crea un nuevo grupo.
-   * @param {*} groupName 
+   * @param {string} groupName: nombre del grupo que se desea crear.
    */
   async createGroup(groupName) {
     // const mucJid = `${groupName}@conference.${this.domain}`;
   
-    // Create the MUC room
     const presence = xml(
       'presence',
       { to: `${groupName}/${this.username}` },
       xml('x', { xmlns: 'http://jabber.org/protocol/muc' })
     );
     await this.xmpp.send(presence);
-  
-    // Configure the MUC room
+    
+    //configurar el grupo para que se puedan unir los invitados
     const iq = xml(
       'iq',
       { type: 'set', to: groupName },
@@ -413,8 +428,8 @@ class Client {
   
   /**
    * inviteToGroup: invita a un usuario a unirse a un grupo.
-   * @param {*} groupName 
-   * @param {*} username 
+   * @param {string} groupName : nombre del grupo al que se desea invitar.
+   * @param {string} username : nombre de usuario del usuario que se desea invitar.
    */
   async inviteToGroup(groupName, username) {
     const invite = xml(
@@ -435,7 +450,7 @@ class Client {
 
   /**
    * joinGroupChat: se une a un grupo existente.
-   * @param {*} roomJid 
+   * @param {String} roomJid 
    */
   async joinGroup(groupJid) {
     try {
@@ -451,25 +466,18 @@ class Client {
       for (const message of oldMessages) {
         console.log(`${message.from}: ${message.body}`);
       }
-  
-      // this.xmpp.on('stanza', async (stanza) => {
-      //   if (stanza.is('message') && stanza.getChild('body')) {
-      //     if (stanza.attrs.type === "groupchat") {
-      //       const from = stanza.attrs.from;
-      //       const body = stanza.getChildText("body");
-      //       if (from && body) {
-      //         console.log(`${from}: ${body}`);
-      //       }
-      //     }
-      //   }
-      // });
+
     } catch (err) {
       console.log('Error:', err.message);
     }
   }
   
+  /**
+   * retrieveGroupChatHistory: recupera el historial de mensajes de un grupo.
+   * @param {String} groupJid : JID of the group chat
+   * @returns 
+   */
   async retrieveGroupChatHistory(groupJid) {
-    // Discover a MAM service
     const disco = await this.xmpp.discoverServices();
     const mamService = disco.find(
       service => service.discoInfo.features.includes('urn:xmpp:mam:2')
@@ -478,7 +486,6 @@ class Client {
       throw new Error('No MAM service found');
     }
   
-    // Query the MAM service for archived messages
     const iq = xml(
       'iq',
       { type: 'set', to: mamService.jid },
@@ -507,8 +514,8 @@ class Client {
 
   /**
    * onGroupMessage: recibe un mensaje de un grupo.
-   * @param {*} groupName: nombre del grupo
-   * @param {*} callback: funcion que se ejecuta cuando se recibe un mensaje de grupo
+   * @param {String} groupName: nombre del grupo
+   * @param {function} callback: funcion que se ejecuta cuando se recibe un mensaje de grupo
    */
   onGroupMessage(groupName, callback) {
     this.xmpp.on('stanza', async (stanza) => {
@@ -526,8 +533,8 @@ class Client {
 
   /**
    * changeStatus: cambia el estado de presencia del usuario.
-   * @param {*} show: available, away, xa, dnd, chat
-   * @param {*} status: mensaje de estado
+   * @param {String} show: available, away, xa, dnd, chat
+   * @param {String} status: mensaje de estado
    * @returns 
    */
   async changeStatus(show, status = "") {
@@ -543,7 +550,6 @@ class Client {
         xml("status", {}, status)
       );
   
-      // Send the IQ stanza to the server
       this.xmpp.send(statusStanza).then(() => {
         console.log(`\nCambio de presencia enviado.`);
         resolve();
@@ -554,85 +560,33 @@ class Client {
     });
   }   
 
-  async sendFile(to, filePath) {
-    // Read the file data
-    const fileData = await fs.promises.readFile(filePath);
-    const fileName = path.basename(filePath);
-    const fileSize = fileData.length;
-    const mimeType = mime.lookup(filePath);
-  
-    // Generate a unique session ID for the file transfer
-    const sid = uuidv4();
-  
-    // Send a stream initiation request to the recipient
-    const siStanza = xml(
-      'iq',
-      { type: 'set', to, id: sid },
-      xml(
-        'si',
-        { xmlns: 'http://jabber.org/protocol/si', id: sid, profile: 'http://jabber.org/protocol/si/profile/file-transfer' },
-        xml(
-          'file',
-          { xmlns: 'http://jabber.org/protocol/si/profile/file-transfer', name: fileName, size: fileSize },
-          xml('desc', {}, `Sending file ${fileName}`),
-          xml('range')
-        ),
-        xml(
-          'feature',
-          { xmlns: 'http://jabber.org/protocol/feature-neg' },
-          xml(
-            'x',
-            { xmlns: 'jabber:x:data', type: 'form' },
-            xml('field', { var: 'stream-method', type: 'list-single' },
-              xml('option', {}, xml('value', {}, 'http://jabber.org/protocol/bytestreams')),
-              xml('option', {}, xml('value', {}, 'http://jabber.org/protocol/ibb'))
-            )
-          )
-        )
-      )
-    );
-    await this.xmpp.send(siStanza);
-  
-    // Open an in-band bytestream to send the file data
-    const blockSize = 4096;
-    const openStanza = xml(
-      'iq',
-      { type: 'set', to, id: sid },
-      xml(
-        'open',
-        { xmlns: 'http://jabber.org/protocol/ibb', sid, 'block-size': blockSize, stanza: 'iq' }
-      )
-    );
-    await this.xmpp.send(openStanza);
-  
-    // Send the file data as a series of data packets
-    let seq = 0;
-    for (let i = 0; i < fileSize; i += blockSize) {
-      const data = fileData.slice(i, i + blockSize);
-      const dataStanza = xml(
-        'iq',
-        { type: 'set', to, id: sid },
-        xml(
-          'data',
-          { xmlns: 'http://jabber.org/protocol/ibb', sid, seq },
-          data.toString('base64')
-        )
-      );
-      await this.xmpp.send(dataStanza);
-      seq++;
+  /**
+   * sendFile: envia un archivo a un usuario.
+   * @param {String} to: destinatario
+   * @param {String} filePath : ruta del archivo
+   */
+  async sendFile(destinatario, filePath) {
+    if (!this.xmpp) {
+      throw new Error('Error en la conexión, intenta de nuevo.');
     }
   
-    // Close the in-band bytestream
-    const closeStanza = xml(
-      'iq',
-      { type: 'set', to, id: sid },
-      xml(
-        'close',
-        { xmlns: 'http://jabber.org/protocol/ibb', sid }
-      )
-    );
-    await this.xmpp.send(closeStanza);
-  }
+    try {
+      const fileBuffer = await fs.readFile(filePath);
+      const fileBase64 = fileBuffer.toString('base64');
+      const fileName = path.basename(filePath);
+  
+      const fileStanza = xml(
+        'message',
+        { type: 'chat', to: destinatario },
+        xml('body', {}, fileName),
+        xml('file', { xmlns: 'urn:xmpp:file-transfer' }, fileBase64)
+      );
+  
+      await this.xmpp.send(fileStanza);
+    } catch (err) {
+      throw new Error('Error al enviar el archivo: ' + err.message);
+    }
+  }  
   
   handleStanza() {
       this.xmpp.on('stanza', (stanza) => {
