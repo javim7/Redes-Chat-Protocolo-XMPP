@@ -15,6 +15,8 @@
  * @requires readline
  */
 
+
+// Importar modulos
 const { client, xml } = require("@xmpp/client");
 const debug = require("@xmpp/debug");
 const fs = require('fs');
@@ -49,7 +51,8 @@ class Client {
       if (this.xmpp) {
         reject(new Error('Ya existe una conexión.'));
       }
-  
+      
+      // Crear cliente XMPP
       this.username = username;
       this.password = password;
       this.xmpp = client({
@@ -58,13 +61,15 @@ class Client {
         username: this.username,
         password: this.password,
       });
-  
+      
+      // Evento para recibir la respuesta del servidor
       try {
         await this.xmpp.start();
       } catch (err) {
         reject(new Error('Error al establecer la conexión.'));
       }
-  
+      
+      // creando la stanza
       const registerStanza = xml(
         'iq',
         { type: 'set', id: 'register' },
@@ -74,7 +79,8 @@ class Client {
           xml('email', {}, email)
         )
       );
-  
+      
+      // Enviar la stanza al servidor
       this.xmpp.send(registerStanza).then(() => {
         resolve();
       }).catch((err) => {
@@ -89,6 +95,7 @@ class Client {
    * @param {String} password
    */
   async login(username, password) {
+    // Crear cliente XMPP
     this.username = username;
     this.password = password;
     this.xmpp = client({
@@ -101,7 +108,8 @@ class Client {
     this.xmpp.on("online", async () => {
       await this.xmpp.send(xml("presence"));
     });
-  
+    
+    // Evento para recibir la respuesta del servidor y conectarse
     try {
       await this.xmpp.start();
       this.listenForStanzas();
@@ -122,6 +130,7 @@ class Client {
       throw new Error("Error en la conexion, intenta de nuevo.");
     }
 
+    // se para la conexion y se reestablecen los valores
     await this.xmpp.stop();
     this.xmpp = null;
     this.username = null;
@@ -136,7 +145,8 @@ class Client {
       if (!this.xmpp) {
         reject(new Error("Error in connection, please try again."));
       }
-  
+      
+      // creando la stanza para eliminar cuenta
       const deleteStanza = xml(
         'iq',
         { type: 'set', id: 'delete' },
@@ -144,7 +154,8 @@ class Client {
           xml('remove')
         )
       );
-  
+        
+      // Enviar la stanza al servidor
       this.xmpp.send(deleteStanza).then(async () => {
         await this.xmpp.stop();
         this.xmpp = null;
@@ -170,13 +181,15 @@ class Client {
       if (!this.xmpp) {
         reject(new Error("Error en conexion, intente de nuevo."));
       }
-  
+      
+      // creando la stanza para obtener los contactos
       const rosterStanza = xml(
         'iq',
         { type: 'get', id: 'roster' },
         xml('query', { xmlns: 'jabber:iq:roster' })
       );
-  
+        
+      // Enviar la stanza al servidor
       this.xmpp.send(rosterStanza).catch((err) => {
         reject(new Error('Error al enviar la solicitud de roster.'));
       });
@@ -218,12 +231,14 @@ class Client {
       if (!this.xmpp) {
         reject(new Error("Error en conexion, intente de nuevo."));
       }
-  
+      
+      // creando la stanza para obtener el estado de presencia
       const probeStanza = xml(
         "presence",
         { type: "probe", to: jid }
       );
-  
+        
+      // Enviar la stanza al servidor
       this.xmpp
         .send(probeStanza)
         .then(() => {
@@ -239,7 +254,8 @@ class Client {
       }, timeout);
   
       let presence = null;
-  
+      
+      // Evento para recibir la respuesta del servidor y llenar datos de contacto
       this.xmpp.on("stanza", (stanza) => {
         if (stanza.is("presence")) {
           // console.log("Received presence stanza:", stanza.toString());
@@ -253,9 +269,10 @@ class Client {
               let show = stanza.getChildText("show");
               const status = stanza.getChildText("status");
   
-              // Only set presence if show or status is present
+              // ver si hay un estado de presencia
               if (show || status) {
                 // console.log("show:", show)
+                // if para cambiar el estado de presencia a un string
                 if(show === null || show === undefined || show === "") {
                   show = "Available";
                 }
@@ -278,7 +295,8 @@ class Client {
           reject(new Error("Error al recibir la presencia del servidor."));
         }
       });
-  
+      
+      // si no se recibe respuesta del servidor, se envia un objeto vacio
       setTimeout(() => {
         resolve(presence || { show: "Available", status: null });
       }, delay);
@@ -295,13 +313,15 @@ class Client {
       if (!this.xmpp) {
         reject(new Error("Error en conexion, intente de nuevo."));
       }
-  
+      
+      // creando la stanza para obtener los contactos
       const rosterStanza = xml(
         'iq',
         { type: 'get', id: 'roster' },
         xml('query', { xmlns: 'jabber:iq:roster' })
       );
-  
+        
+      // Enviar la stanza al servidor
       this.xmpp.send(rosterStanza).catch((err) => {
         reject(new Error('Error al enviar la solicitud de roster.'));
       });
@@ -328,7 +348,8 @@ class Client {
                 contactList.push({jid, name, subscription, status});
               }
             });
-  
+            
+            // si no se encuentra el contacto, se envia un error
             if (contactList.length === 0) {
               reject(new Error(`No se encontró un contacto con el JID ${jid}.`));
             } else {
@@ -349,7 +370,8 @@ class Client {
       if (!this.xmpp) {
         reject(new Error("Error in connection, please try again."));
       }
-  
+      
+      // Crear la stanza para agregar el contacto
       const addStanza = xml(
         'iq',
         { type: 'set', id: 'add' },
@@ -357,7 +379,8 @@ class Client {
           xml('item', { jid: jid })
         )
       );
-  
+        
+      // Enviar la stanza al servidor
       this.xmpp.send(addStanza).then(async () => {
         // Enviar una solicitud de suscripción al contacto
         const presenceStanza = xml(
@@ -388,10 +411,12 @@ class Client {
       throw new Error("Error in connection, please try again.");
     }
     
+    // Buscar la stanza de la solicitud de amistad
     const stanza = Array.from(this.notifications).find(notification =>
       notification.includes(`Nueva solicitud de amistad de: ${fromJid}`)
     );
 
+    // if para recibir o rechazar la solicitud con sus debidas stanzas
     if (accept) {
       const presence = xml('presence', { to: fromJId2, type: 'subscribed' });
       this.xmpp.send(presence);
@@ -402,17 +427,23 @@ class Client {
       console.log(`\nSolicitud de amistad de ${fromJid} eliminada.`);
     }
 
+    // Eliminar la stanza de la solicitud de amistad
     if (stanza) {
       this.notifications.delete(stanza);
     }
 
   }  
 
+  /**
+   * getContactRequests: obtiene las solicitudes de amistad pendientes.
+   * @returns {Array} presenceStanzas: lista de stanzas de solicitudes de amistad.
+   */
   async getContactRequests() {
     if (!this.xmpp) {
       throw new Error("Error in connection, please try again.");
     }
-  
+    
+    // Obtener las stanzas de las solicitudes de amistad
     const presenceStanzas = Array.from(this.notifications).filter(notification =>
       notification.includes("Nueva solicitud de amistad de:")
     );
@@ -430,6 +461,7 @@ class Client {
       throw new Error("Error en la conexion, intenta de nuevo.");
     }
 
+    // Crear la stanza del mensaje
     const messageStanza = xml(
       "message",
       { type: "chat", to: destinatario },
@@ -449,6 +481,7 @@ class Client {
       throw new Error("Error en la conexion, intenta de nuevo.");
     }
 
+    // Crear la stanza del mensaje de chat
     const messageStanza = xml(
       "message",
       { type: "groupchat", to: groupName },
@@ -499,7 +532,7 @@ class Client {
     );
     await this.xmpp.send(iq);
   
-    // Send a welcome message
+    // mandar mensaje de bienvenida
     const message = "Bienvenidos al grupo " + groupName + ".";
     await this.chatMessage(groupName, message);
   }  
@@ -510,6 +543,7 @@ class Client {
    * @param {string} username : nombre de usuario del usuario que se desea invitar.
    */
   async inviteToGroup(groupName, username) {
+    // stanza para invitar al usuario
     const invite = xml(
       'message',
       { to: groupName },
@@ -523,6 +557,7 @@ class Client {
         )
       )
     );
+    // enviar la stanza
     await this.xmpp.send(invite);
   }  
 
@@ -532,6 +567,7 @@ class Client {
    */
   async joinGroup(groupJid) {
     try {
+      // stanza para unirse a un grupo existente
       const presence = xml(
         'presence',
         { to: `${groupJid}/${this.username}` },
@@ -539,7 +575,7 @@ class Client {
       );
       await this.xmpp.send(presence);
   
-      // Retrieve old messages from the group chat
+      // obtener mensajes viejos del grupo
       const oldMessages = await this.retrieveGroupChatHistory(groupJid);
       for (const message of oldMessages) {
         console.log(`${message.from}: ${message.body}`);
@@ -556,6 +592,7 @@ class Client {
    * @returns 
    */
   async retrieveGroupChatHistory(groupJid) {
+    // obtener el servicio MAM
     const disco = await this.xmpp.discoverServices();
     const mamService = disco.find(
       service => service.discoInfo.features.includes('urn:xmpp:mam:2')
@@ -563,7 +600,8 @@ class Client {
     if (!mamService) {
       throw new Error('No MAM service found');
     }
-  
+    
+    // obtener los mensajes del grupo
     const iq = xml(
       'iq',
       { type: 'set', to: mamService.jid },
@@ -580,6 +618,7 @@ class Client {
         )
       )
     );
+    // enviar la stanza
     const response = await this.xmpp.sendIq(iq);
     const forwardedMessages = response.getChild('fin').getChildren('forwarded');
     return forwardedMessages.map(forwarded => {
@@ -596,6 +635,7 @@ class Client {
    * @param {function} callback: funcion que se ejecuta cuando se recibe un mensaje de grupo
    */
   onGroupMessage(groupName, callback) {
+    // stanza para recibir mensajes de un grupo
     this.xmpp.on('stanza', async (stanza) => {
       // console.log(stanza.toString)
       if (stanza.is('message') && stanza.attrs.type === 'groupchat') {
@@ -618,11 +658,13 @@ class Client {
     if (!this.xmpp) {
       throw new Error("Error in connection, please try again.");
     }
-  
+    
+    // stanza para aceptar o rechazar una invitacion a un grupo
     const stanza = Array.from(this.notifications).find(notification =>
       notification.includes(`Nueva invitación de grupo de: ${fromJid}`)
     );
   
+    // aceptar o rechazar la invitacion
     if (accept) {
       const presence = xml('presence', { to: fromJid, type: 'subscribed' });
       this.xmpp.send(presence);
@@ -632,7 +674,8 @@ class Client {
       this.xmpp.send(presence);
       console.log(`Invitación de grupo de ${fromJid} eliminada.`);
     }
-  
+    
+    // eliminar la notificacion
     if (stanza) {
       this.notifications.delete(stanza);
     }
@@ -646,7 +689,7 @@ class Client {
     if (!this.xmpp) {
       throw new Error("Error in connection, please try again.");
     }
-  
+    // obtener las invitaciones a grupos
     const invites = Array.from(this.notifications).filter(notification =>
       notification.includes("Nueva invitación de grupo de:")
     );
@@ -665,14 +708,16 @@ class Client {
       if (!this.xmpp) {
         reject(new Error("Error in connection, please try again."));
       }
-  
+      
+      // stanza para cambiar el estado de presencia
       const statusStanza = xml(
         "presence",
         {},
         xml("show", {}, show),
         xml("status", {}, status)
       );
-  
+        
+      // enviar la stanza
       this.xmpp.send(statusStanza).then(() => {
         console.log(`\nCambio de presencia enviado.`);
         resolve();
@@ -693,18 +738,18 @@ class Client {
       throw new Error("Error en la conexion, intenta de nuevo.");
     }
 
-    // Read the file data
+    // leer el archivo
     const fileData = fs.readFileSync(filePath);
     const fileName = path.basename(filePath);
     const fileSize = fileData.byteLength;
 
-    // Request a slot from the server
+    // Solicitar un slot para subir el archivo
     const slot = await this.requestSlot(fileName, fileSize);
 
-    // Upload the file to the server
+    // Subir el archivo
     await this.uploadFile(slot, fileData);
 
-    // Send the URL to the recipient
+    // Enviar el mensaje con el link del archivo
     const messageStanza = xml(
       "message",
       { type: "chat", to: destinatario },
@@ -720,9 +765,16 @@ class Client {
     await this.xmpp.send(messageStanza);
   }
 
+  /**
+   * requestSlot: solicita un slot para subir un archivo.
+   * @param {string} fileName : nombre del archivo
+   * @param {float} fileSize : tamaño del archivo
+   * @returns 
+   */
   async requestSlot(fileName, fileSize) {
-    console.log("entro")
+    // Solicitar un slot para subir el archivo
     return new Promise((resolve, reject) => {
+      // stanza para solicitar un slot
       const iqStanza = xml(
         'iq',
         { type: 'get', to: 'upload.alumchat.xyz' },
@@ -731,8 +783,9 @@ class Client {
   
       this.xmpp.send(iqStanza)
         .then((result) => {
-          console.log('Raw response:', result); // Debug output
-  
+          console.log('Raw response:', result); 
+          
+          // obtener el slot
           const slot = result.getChild('slot', 'urn:xmpp:http:upload:0');
           if (slot) {
             resolve(slot);
@@ -746,8 +799,15 @@ class Client {
     });
   }  
 
+  /**
+   * uploadFile: sube un archivo a un slot.
+   * @param {*} slot : slot para subir el archivo
+   * @param {*} fileData : datos del archivo
+   * @returns 
+   */
   async uploadFile(slot, fileData) {
     return new Promise((resolve, reject) => {
+      // subir el archivo
       const putUrl = slot.getChild("put").attrs.url;
       const options = url.parse(putUrl);
       options.method = "PUT";
@@ -756,6 +816,7 @@ class Client {
         "Content-Length": fileData.byteLength,
       };
 
+      // enviar el archivo
       const req = https.request(options, (res) => {
         if (res.statusCode === 201) {
           resolve();
@@ -764,6 +825,7 @@ class Client {
         }
       });
 
+      // error al subir el archivo
       req.on("error", (err) => {
         reject(err);
       });
@@ -780,8 +842,10 @@ class Client {
     if (!this.xmpp) {
       throw new Error("Error in connection, please try again.");
     }
-  
+    
+    // escuchando las stanzas entrantes
     this.xmpp.on("stanza", (stanza) => {
+      // stanzas de mensaje, solo la de invitacion se agrega a la lista
       if (stanza.is("message") && this.receiveNotifications) {
         // console.log(stanza.toString());
         const type = stanza.attrs.type;
@@ -799,6 +863,7 @@ class Client {
           this.notifications.add(`Nueva invitación de grupo de: ${from.split("@")[0]}`);
         }
       } else if (stanza.is("presence") && stanza.attrs.type === "subscribe") {
+        // solicitudes de amistad
         console.log(`Nueva solicitud de amistad de: ${stanza.attrs.from.split("@")[0]}`);
         this.notifications.add(`Nueva solicitud de amistad de: ${stanza.attrs.from.split("@")[0]}`);
       }

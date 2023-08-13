@@ -178,6 +178,7 @@ async function logoutMain() {
 async function deleteAccountMain() {
   console.log("\nELIMINAR CUENTA:");
   try {
+    // obtener el username del cliente
     const username = client.username;
     await client.deleteAccount();
     console.log("\nCuenta " + username + " eliminada exitosamente!");
@@ -197,13 +198,16 @@ async function getContactsMain() {
     const contacts = await client.getContacts();
 
     if (contacts.length === 0) {
+      // Si no hay contactos, se muestra un mensaje
       console.log("\nNo se encontraron contactos.");
     } else {
-      const columnWidth = 40;
+      // Si hay contactos, se muestran en pantalla
+      const columnWidth = 40; // ancho de las columnas
       console.log(
         `- ${pad("JID", columnWidth)}${pad("Estado", columnWidth)}Mensaje`
       );
-
+      
+      // forlopp para mostrar los contactos y su informacion
       for (const contact of contacts) {
         try {
           const presence = await client.getPresence(contact.jid);
@@ -224,6 +228,13 @@ async function getContactsMain() {
   }
 }
 
+/**
+ * pad: rellena un string con un caracter hasta alcanzar el ancho deseado
+ * @param {string} str : string a rellenar
+ * @param {int} width : ancho de la columna
+ * @param {string} padChar : caracter de relleno
+ * @returns 
+ */
 function pad(str, width, padChar = " ") {
   return str.padEnd(width, padChar).slice(0, width);
 }
@@ -253,11 +264,14 @@ async function getContactMain() {
  */
 async function addContactMain() {
   console.log("\nGESTIONAR CONTACTOS:");
+  // mostrar las opciones disponibles
   console.log("[1] Agregar contacto");
   console.log("[2] Aceptar solicitudes de contacto");
 
+  // obtener la opcion del usuario
   rl.question("Opción -> ", async (answer) => {
     if (answer === '1') {
+      // si el usuario elige agregar un contacto, se le pide el nombre de usuario
       rl.question("Nombre de usuario: ", async (nombre) => {
         const jid = nombre + "@alumchat.xyz";
         try {
@@ -269,6 +283,7 @@ async function addContactMain() {
         submenu();
       });
     } else if (answer === '2') {
+      // si el usuario elige aceptar solicitudes de contacto, se llama a acceptContactRequest()
       try {
         const requests = await client.getContactRequests();
         if (requests.length === 0) {
@@ -282,6 +297,7 @@ async function addContactMain() {
           console.log(`[${i + 1}] ${requests[i]}`);
         }
 
+        // obtener la solicitud que el usuario desea aceptar
         rl.question("Elija el número de la solicitud que desea aceptar o eliminar: ", async (answer) => {
           const index = parseInt(answer) - 1;
 
@@ -316,6 +332,7 @@ async function addContactMain() {
 async function oneOnOneChatMain() {
   console.log("\nCOMUNICACION 1 A 1:");
   client.receiveNotifications = false;
+  // obtener el nombre de usuario
   rl.question("Nombre de usuario: ", async (nombre) => {
     const jid = nombre + "@alumchat.xyz";
     console.log(`Iniciando chat con ${jid}...`);
@@ -366,12 +383,13 @@ async function oneOnOneChatMain() {
  */
 async function groupChatMain() {
   console.log('\nPARTICIPAR EN CONVERSACIONES GRUPALES:');
+  // mostrar las opciones disponibles
   console.log('[1] Crear un grupo');
   console.log('[2] Chatear en un grupo existente');
   console.log('[3] Aceptar invitaciones de grupo');
   rl.question('Opcion: ', async option => {
     if (option === '1') {
-      // Create a new group
+      // se crea un nuevo grupo
       rl.question('\nNombre del grupo: ', async groupName => {
         groupJid = groupName + '@conference.alumchat.xyz';
         try {
@@ -384,11 +402,11 @@ async function groupChatMain() {
         }
       });
     } else if (option === '2') {
-      // Chat in an existing group
+      // se une a un grupo existente
       rl.question('\nNombre del grupo: ', async groupName => {
         groupJid = groupName + '@conference.alumchat.xyz';
         try {
-          await client.joinGroup(groupJid);
+          await client.joinGroup(groupJid); // se une al grupo
           await groupChatMain2(groupJid);
         } catch (err) {
           console.log('Error:', err.message);
@@ -396,7 +414,7 @@ async function groupChatMain() {
         }
       });
     } else if (option === '3') {
-      // Accept group invites
+      // aceptar invitaciones de grupo
       try {
         const invites = await client.getInviteRequests();
         if (invites.length === 0) {
@@ -410,6 +428,7 @@ async function groupChatMain() {
           console.log(`[${i + 1}] ${invites[i]}`);
         }
 
+        // obtener la invitación que el usuario desea aceptar
         rl.question("Elija el número de la invitación que desea aceptar o eliminar: ", async (answer) => {
           const index = parseInt(answer) - 1;
 
@@ -418,14 +437,20 @@ async function groupChatMain() {
             groupChatMain();
             return;
           }
-
+          
           const invite = invites[index];
           const fromJid = invite.match(/Nueva invitación de grupo de: (.+)/)[1];
           rl.question(`¿Desea aceptar la invitación de ${fromJid}? (s/n): `, async (answer) => {
             const accept = answer.toLowerCase() === 's';
             await client.handleGroupInvite(fromJid, accept);
-            await client.joinGroup(fromJid);
-            await groupChatMain2(fromJid);
+            // si se acepta la invitación, se une al grupo, sino se va al submenu
+            if (accept) {
+              await client.joinGroup(fromJid);
+              await groupChatMain2(fromJid);
+            } else {
+              // console.log(`Invitación de grupo de ${fromJid} eliminada.`);
+              submenu();
+            }
           });
         });
       } catch (err) {
@@ -483,12 +508,15 @@ async function groupChatMain2(groupName) {
  */
 async function changeStatusMain() {
     console.log("\nDEFINIR PRESENCIA:");
+    // mostrar las opciones disponibles
     console.log("[1] Available");
     console.log("[2] Away");
     console.log("[3] Not Available");
     console.log("[4] Busy");
     console.log("[5] Offline");
-  
+
+    // obtener la opción del usuario
+    //las opciones estan escritas como se ven en xmpp
     rl.question("Opcion -> ", async (answer) => {
       let showOption;
       switch (answer) {
@@ -512,7 +540,8 @@ async function changeStatusMain() {
           changeStatusMain();
           return;
       }
-  
+      
+      // obtener el mensaje de status del usuario
       rl.question("Ingresar mensaje de status (opcional): ", async (status) => {
         try {
           await client.changeStatus(showOption, status);
@@ -525,11 +554,16 @@ async function changeStatusMain() {
     });
   }  
 
+  /**
+   * viewNotificationsMain: despliega las notificaciones del usuario
+   */
   function viewNotificationsMain() {
     console.log("\nNOTIFICACIONES:");
+    // si no hay notificaciones, se muestra un mensaje
     if (client.notifications.size === 0) {
       console.log("No tienes notificaciones.");
     } else {
+      // mostrar las notificaciones
       for(notification of client.notifications) {
         console.log(notification);
       }
