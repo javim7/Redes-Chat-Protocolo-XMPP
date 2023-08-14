@@ -475,9 +475,9 @@ class Client {
   /**
    * chatMessage: envía un mensaje a un grupo.
    * @param {string} groupName : nombre del grupo al que se desea enviar el mensaje.
-   * @param {string} mensaje : mensaje que se desea enviar.
+   * @param {string} message : mensaje que se desea enviar.
    */
-  async chatMessage(groupName, mensaje) {
+  async chatMessage(groupName, message) {
     if (!this.xmpp) {
       throw new Error("Error en la conexion, intenta de nuevo.");
     }
@@ -486,7 +486,7 @@ class Client {
     const messageStanza = xml(
       "message",
       { type: "groupchat", to: groupName },
-      xml("body", {}, mensaje)
+      xml("body", {}, message)
     );
 
     await this.xmpp.send(messageStanza);
