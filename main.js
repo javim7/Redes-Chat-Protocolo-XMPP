@@ -130,7 +130,7 @@ async function registerMain() {
         } catch (err) {
           // Si hay un error, se muestra en pantalla y se vuelve a llamar a register()
           console.log("\nError: " + err.message);
-          menu();
+          loginMain();
         }
       });
     });
@@ -251,7 +251,8 @@ async function getContactMain() {
       // llamar a la funcion con los parametros
       const contact = await client.getContact(jid);
       const presence = await client.getPresence(jid);
-      console.log(`\n- JID: ${contact.jid}, Nombre: ${contact.name}, Suscripción: ${contact.subscription}, Estado: ${presence.show}, Mensaje: ${presence.status}`);
+      console.log("\nDetalles de  : " + nombre)
+      console.log(`-JID         : ${contact.jid}\n-Nombre      : ${contact.name}\n-Suscripción : ${contact.subscription}\n-Estado      : ${presence.show}\n-Mensaje     : ${presence.status}`);
     } catch (err) {
       console.log("\nError al obtener el contacto:", err.message);
     }
@@ -361,7 +362,6 @@ async function oneOnOneChatMain() {
       } else if (line === 'file') {
         rl.question('Ruta del archivo: ', async (filePath) => {
           try {
-            await client.checkHttpUploadSupport();
             await client.sendFile(jid, filePath);
             console.log('Archivo enviado exitosamente!');
           } catch (err) {
@@ -445,8 +445,9 @@ async function groupChatMain() {
             await client.handleGroupInvite(fromJid, accept);
             // si se acepta la invitación, se une al grupo, sino se va al submenu
             if (accept) {
-              await client.joinGroup(fromJid);
-              await groupChatMain2(fromJid);
+              groupJid = fromJid + '@conference.alumchat.xyz';
+              await client.joinGroup(groupJid);
+              await groupChatMain2(groupJid);
             } else {
               // console.log(`Invitación de grupo de ${fromJid} eliminada.`);
               submenu();

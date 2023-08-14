@@ -23,6 +23,7 @@ const fs = require('fs');
 const path = require('path');
 const url = require('url');
 const https = require('https');
+const mime = require('mime-types');
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
@@ -339,7 +340,7 @@ class Client {
                 const jid = contact.attrs.jid;
                 const name = contact.attrs.name || jid;
                 const subscription = contact.attrs.subscription;
-                console.log(subscription)
+                // console.log(subscription)
   
                 // Obtener el estado de presencia del contacto (si está disponible)
                 const presence = this.xmpp.presences && this.xmpp.presences[jid];
@@ -658,28 +659,46 @@ class Client {
     if (!this.xmpp) {
       throw new Error("Error in connection, please try again.");
     }
-    
-    // stanza para aceptar o rechazar una invitacion a un grupo
+    const groupJid = fromJid + "@conference." + this.domain;
+    const userJid = this.username + "@" + this.domain;
+  
+    // stanza to accept or reject a group invitation
     const stanza = Array.from(this.notifications).find(notification =>
       notification.includes(`Nueva invitación de grupo de: ${fromJid}`)
     );
   
-    // aceptar o rechazar la invitacion
+    // accept or reject the invitation
     if (accept) {
-      const presence = xml('presence', { to: fromJid, type: 'subscribed' });
+      const presence = xml(
+        'presence',
+        { from: userJid, to: groupJid },
+        xml('x', { xmlns: 'http://jabber.org/protocol/muc' })
+      );
       this.xmpp.send(presence);
       console.log(`Invitación de grupo de ${fromJid} aceptada.`);
     } else {
-      const presence = xml('presence', { to: fromJid, type: 'unsubscribed' });
-      this.xmpp.send(presence);
+      const message = xml(
+        'message',
+        { from: userJid, to: groupJid },
+        xml(
+          'x',
+          { xmlns: 'http://jabber.org/protocol/muc#user' },
+          xml(
+            'decline',
+            { to: fromJid },
+            xml('reason', {}, 'Sorry, I cannot join right now.')
+          )
+        )
+      );
+      this.xmpp.send(message);
       console.log(`Invitación de grupo de ${fromJid} eliminada.`);
     }
-    
-    // eliminar la notificacion
+  
+    // remove the notification
     if (stanza) {
       this.notifications.delete(stanza);
     }
-  }  
+  }    
 
   /**
    * getInviteRequests: obtiene las invitaciones a grupos.
@@ -737,103 +756,91 @@ class Client {
     if (!this.xmpp) {
       throw new Error("Error en la conexion, intenta de nuevo.");
     }
-
-    // leer el archivo
-    const fileData = fs.readFileSync(filePath);
-    const fileName = path.basename(filePath);
-    const fileSize = fileData.byteLength;
-
-    // Solicitar un slot para subir el archivo
-    const slot = await this.requestSlot(fileName, fileSize);
-
-    // Subir el archivo
-    await this.uploadFile(slot, fileData);
-
-    // Enviar el mensaje con el link del archivo
+  
+    // Check if the server supports HTTP File Upload
+    const uploadService = await this.discoverUploadService();
+    if (!uploadService) {
+      throw new Error('HTTP File Upload not supported by server');
+    }
+  
+    // Read the file and get its size and type
+    const file = fs.readFileSync(filePath);
+    const fileSize = fs.statSync(filePath).size;
+    const fileType = mime.lookup(filePath);
+  
+    // Request a slot from the server
+    const slot = await this.requestSlot(uploadService, filePath, fileSize, fileType);
+  
+    // Upload the file to the server
+    await this.uploadFile(slot.putUrl, file, fileType);
+  
+    // Send the URL of the uploaded file to the recipient
     const messageStanza = xml(
       "message",
       { type: "chat", to: destinatario },
-      xml("body", {}, `Archivo enviado: ${slot.get.url}`),
-      xml(
-        "x",
-        { xmlns: "jabber:x:oob" },
-        xml("url", {}, slot.get.url),
-        xml("desc", {}, fileName)
-      )
+      xml("body", {}, 'File sent: ' + slot.getUrl)
     );
-
     await this.xmpp.send(messageStanza);
   }
-
-  /**
-   * requestSlot: solicita un slot para subir un archivo.
-   * @param {string} fileName : nombre del archivo
-   * @param {float} fileSize : tamaño del archivo
-   * @returns 
-   */
-  async requestSlot(fileName, fileSize) {
-    // Solicitar un slot para subir el archivo
-    return new Promise((resolve, reject) => {
-      // stanza para solicitar un slot
-      const iqStanza = xml(
-        'iq',
-        { type: 'get', to: 'upload.alumchat.xyz' },
-        xml('request', { xmlns: 'urn:xmpp:http:upload:0', filename: fileName, size: fileSize })
-      );
   
-      this.xmpp.send(iqStanza)
-        .then((result) => {
-          console.log('Raw response:', result); 
-          
-          // obtener el slot
-          const slot = result.getChild('slot', 'urn:xmpp:http:upload:0');
-          if (slot) {
-            resolve(slot);
-          } else {
-            reject(new Error('No se pudo obtener el slot del servidor.'));
-          }
-        })
-        .catch((err) => {
-          reject(err);
-        });
-    });
-  }  
-
-  /**
-   * uploadFile: sube un archivo a un slot.
-   * @param {*} slot : slot para subir el archivo
-   * @param {*} fileData : datos del archivo
-   * @returns 
-   */
-  async uploadFile(slot, fileData) {
+  async discoverUploadService() {
+    const stanza = xml(
+      'iq',
+      { type: 'get', id: 'disco1' },
+      xml('query', { xmlns: 'http://jabber.org/protocol/disco#items' })
+    );
+    const response = await this.xmpp.send(stanza);
+    const services = response.getChild('query').getChildren('item').map(item => item.attrs.jid);
+    for (const service of services) {
+      const stanza = xml(
+        'iq',
+        { type: 'get', to: service, id: 'disco2' },
+        xml('query', { xmlns: 'http://jabber.org/protocol/disco#info' })
+      );
+      const response = await this.xmpp.send(stanza);
+      const identities = response.getChild('query').getChildren('identity');
+      for (const identity of identities) {
+        if (identity.attrs.category === 'store' && identity.attrs.type === 'file') {
+          return service;
+        }
+      }
+    }
+  }
+  
+  async requestSlot(service, fileName, fileSize, fileType) {
+    const stanza = xml(
+      'iq',
+      { type: 'get', to: service, id: 'request-slot' },
+      xml('request', { xmlns: 'urn:xmpp:http:upload:0', filename: fileName, size: fileSize, 'content-type': fileType })
+    );
+    const response = await this.xmpp.send(stanza);
+    const slot = response.getChild('slot', 'urn:xmpp:http:upload:0');
+    return {
+      putUrl: slot.getChildText('put'),
+      getUrl: slot.getChildText('get')
+    };
+  }
+  
+  async uploadFile(url, data, contentType) {
     return new Promise((resolve, reject) => {
-      // subir el archivo
-      const putUrl = slot.getChild("put").attrs.url;
-      const options = url.parse(putUrl);
-      options.method = "PUT";
+      const options = url.parse(url);
+      options.method = 'PUT';
       options.headers = {
-        "Content-Type": "application/octet-stream",
-        "Content-Length": fileData.byteLength,
+        'Content-Type': contentType,
+        'Content-Length': data.length
       };
-
-      // enviar el archivo
-      const req = https.request(options, (res) => {
-        if (res.statusCode === 201) {
+      const req = https.request(options, res => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
           resolve();
         } else {
-          reject(new Error(`Error al subir el archivo. Codigo de estado: ${res.statusCode}`));
+          reject(new Error(`Failed to upload file. Status code: ${res.statusCode}`));
         }
       });
-
-      // error al subir el archivo
-      req.on("error", (err) => {
-        reject(err);
-      });
-
-      req.write(fileData);
+      req.on('error', err => reject(err));
+      req.write(data);
       req.end();
     });
-  } 
+  }  
 
   /**
    * listenForStanzas: escucha los mensajes entrantes y los anade a la lista de notificaciones.
@@ -843,6 +850,9 @@ class Client {
       throw new Error("Error in connection, please try again.");
     }
     
+    //definimos el largo maximo para los mensajes
+    const maxLength = 40;
+
     // escuchando las stanzas entrantes
     this.xmpp.on("stanza", (stanza) => {
       // stanzas de mensaje, solo la de invitacion se agrega a la lista
@@ -850,13 +860,22 @@ class Client {
         // console.log(stanza.toString());
         const type = stanza.attrs.type;
         const from = stanza.attrs.from;
-        const body = stanza.getChildText("body");
+        let body = stanza.getChildText("body");
   
         if (type === "chat" && body) {
+          //vemos si el mensaje es muy largo
+          if (body.length > maxLength) {
+            body = body.substring(0, maxLength) + "...";
+          }
+
           console.log(`Nuevo mensaje de ${from.split("@")[0]}: ${body}`);
         } else if (type === "groupchat" && body) {
           const jid = from.split("/")[1];
           const groupname = from.split("@")[0];
+          //vemos si el mensaje es muy largo
+          if (body.length > maxLength) {
+            body = body.substring(0, maxLength) + "...";
+          }
           console.log(`Nuevo mensaje de ${jid} en grupo ${groupname}: ${body}`);
         } else if (from.includes("@conference")) {
           console.log(`Nueva invitación de grupo de: ${from.split("@")[0]}`);
