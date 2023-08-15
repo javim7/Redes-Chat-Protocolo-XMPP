@@ -264,15 +264,14 @@ class Client {
           const fromJid = from.split("/")[0];
           if (fromJid === jid) {
             clearTimeout(timeoutId);
-            if (stanza.attrs.type === "unavailable") {
-              presence = { show: "unavailable", status: null };
+            if (stanza.attrs.type === "error") {
+              presence = { show: "Offline", status: null };
             } else {
               let show = stanza.getChildText("show");
               const status = stanza.getChildText("status");
   
               // ver si hay un estado de presencia
               if (show || status) {
-                // console.log("show:", show)
                 // if para cambiar el estado de presencia a un string
                 if(show === null || show === undefined || show === "") {
                   show = "Available";
@@ -287,19 +286,17 @@ class Client {
                   show = "Offline";
                 }
                 presence = { show, status };
+              } else{
+                presence = { show: "Available", status: null };
               }
             }
           }
-        } else if (stanza.is("iq") && stanza.attrs.type === "error") {
-          console.log("Received error stanza:", stanza.toString());
-          clearTimeout(timeoutId);
-          reject(new Error("Error al recibir la presencia del servidor."));
-        }
+        } 
       });
       
       // si no se recibe respuesta del servidor, se envia un objeto vacio
       setTimeout(() => {
-        resolve(presence || { show: "Available", status: null });
+        resolve(presence || { show: "Offline", status: null });
       }, delay);
     });
   }  
@@ -749,10 +746,10 @@ class Client {
 
   /**
    * sendFile: envia un archivo a un usuario.
-   * @param {String} to: destinatario
+   * @param {String} jid: destinatario
    * @param {String} filePath : ruta del archivo
    */
-  async sendFile(destinatario, filePath) {
+  async sendFile(jid, filePath) {
     if (!this.xmpp) {
       throw new Error("Error en la conexion, intenta de nuevo.");
     }
@@ -777,7 +774,7 @@ class Client {
     // Send the URL of the uploaded file to the recipient
     const messageStanza = xml(
       "message",
-      { type: "chat", to: destinatario },
+      { type: "chat", to: jid },
       xml("body", {}, 'File sent: ' + slot.getUrl)
     );
     await this.xmpp.send(messageStanza);

@@ -38,6 +38,7 @@ function menu() {
     console.log('[2] INICIAR SESION');
     console.log('[3] CERRAR SESION');
     console.log('[4] ELIMINAR CUENTA');
+    console.log('[5] SALIR');
     
     // Leer la opcion del usuario y llamar la funcion correspondente
     rl.question('Opcion -> ', answer => {
@@ -53,6 +54,10 @@ function menu() {
             break;
         case '4':
             deleteAccountMain();
+            break;
+        case '5':
+            console.log('\nGracias por usar alumchat. Vuelva pronto!');
+            rl.close();
             break;
         default:
             console.log('Opcion invalida! Intente de nuevo!');
@@ -74,8 +79,7 @@ function menu() {
     console.log('[5] Participar en conversaciones grupales');
     console.log('[6] Definir mensaje de presencia');
     console.log('[7] Ver notificaciones');
-    console.log('[8] Enviar/recibir archivos');
-    console.log('[9] Regresar al menu principal');
+    console.log('[8] Regresar al menu principal');
     
     // Leer la opcion del usuario y llamar la funcion correspondente
     rl.question('Opcion -> ', answer => {
@@ -102,9 +106,6 @@ function menu() {
             viewNotificationsMain();
             break;
         case '8':
-            
-            break;
-        case '9':
             menu();
             break;
         default:
@@ -211,7 +212,7 @@ async function getContactsMain() {
       for (const contact of contacts) {
         try {
           const presence = await client.getPresence(contact.jid);
-          const show = presence.show || "Available";
+          const show = presence.show || "Offline";
           const status = presence.status || "---";
           console.log(
             `- ${pad(contact.jid, columnWidth)}${pad(show, columnWidth)}${status}`
@@ -252,7 +253,7 @@ async function getContactMain() {
       const contact = await client.getContact(jid);
       const presence = await client.getPresence(jid);
       console.log("\nDetalles de  : " + nombre)
-      console.log(`-JID         : ${contact.jid}\n-Nombre      : ${contact.name}\n-Suscripción : ${contact.subscription}\n-Estado      : ${presence.show}\n-Mensaje     : ${presence.status}`);
+      console.log(`-JID         : ${contact.jid}\n-Nombre      : ${contact.name.split("@")[0]}\n-Suscripción : ${contact.subscription}\n-Estado      : ${presence.show}\n-Mensaje     : ${presence.status}`);
     } catch (err) {
       console.log("\nError al obtener el contacto:", err.message);
     }

@@ -41,12 +41,13 @@ The application is an easy one to use; the only steps it has are to install the 
 
 1. Make sure you are in the correct directory and run the following command:
 ```bash
-# instalar las dependencias
+# install dependencies
 npm i
 ```
 
 2. While in the same directory, run the main file:
 ```bash
+# run the main file
 node main.js
 ```
 
