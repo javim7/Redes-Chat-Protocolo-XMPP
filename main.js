@@ -341,6 +341,9 @@ async function oneOnOneChatMain() {
     console.log("\nEscriba 'exit' para salir del chat.");
     console.log("Escriba 'file' para enviar un archivo.\n");
 
+    //obtener mensajes anteriores
+    // client.retrieveChatHistory(jid);
+
     // escucha poor mensajes entrantes
     client.xmpp.on('stanza', (stanza) => {
       // console.log(`Received stanza: ${stanza.toString()}`);
@@ -404,8 +407,8 @@ async function groupChatMain() {
       });
     } else if (option === '2') {
       // se une a un grupo existente
-      rl.question('\nNombre del grupo: ', async groupName => {
-        groupJid = groupName + '@conference.alumchat.xyz';
+      rl.question('\nNombre del grupo: ', async groupName2 => {
+        groupJid = groupName2 + '@conference.alumchat.xyz';
         try {
           await client.joinGroup(groupJid); // se une al grupo
           await groupChatMain2(groupJid);

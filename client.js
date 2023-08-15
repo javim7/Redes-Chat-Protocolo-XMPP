@@ -46,6 +46,7 @@ class Client {
    * register: registra un nuevo usuario en el servidor.
    * @param {String} username 
    * @param {String} password 
+   * @return {Promise}: promesa que se resuelve cuando el usuario se ha registrado correctamente.
    */
   async register(username, password, email) {
     return new Promise(async (resolve, reject) => {
@@ -140,6 +141,7 @@ class Client {
 
   /**
    * deleteAccount: elimina la cuenta del usuario del servidor.
+   * @return {Promise}: promesa que se resuelve cuando el usuario se ha eliminado correctamente.
    */
   async deleteAccount() {
     return new Promise((resolve, reject) => {
@@ -175,7 +177,7 @@ class Client {
 
   /**
    * getContacts: obtiene la lista de contactos del usuario.
-   * @returns lista de contactos
+   * @return {Promise}: promesa que se resuelve cuando se obtiene la lista de contactos.
    */
   async getContacts() {
     return new Promise((resolve, reject) => {
@@ -225,7 +227,7 @@ class Client {
   /**
    * getPresence: obtiene el estado de presencia de un contacto.
    * @param {string} jid 
-   * @returns show, status
+   * @return {Promise}: promesa que se resuelve cuando se obtiene el estado de presencia.
    */
   async getPresence(jid, timeout = 2000, delay = 500) {
     return new Promise((resolve, reject) => {
@@ -304,7 +306,7 @@ class Client {
   /**
    * getContact: obtiene la informacion de un contacto en especifico.
    * @param {String} user: nombre de usuario del contacto que se desea obtener. 
-   * @returns 
+   * @return {Promise}: promesa que se resuelve cuando se obtiene la informacion del contacto.
    */
   async getContact(jid) {
     return new Promise((resolve, reject) => {
@@ -362,6 +364,7 @@ class Client {
   /**
    * addContact: agrega un nuevo contacto al roster.
    * @param {string} jid: nombre de usuario del contacto que se desea agregar.
+   * @return {Promise}: promesa que se resuelve cuando se agrega el contacto.
    */
   async addContact(jid) {
     return new Promise(async (resolve, reject) => {
@@ -584,10 +587,18 @@ class Client {
     }
   }
   
+  async retrieveChatHistory(contactJid) {
+    const messages = await this.retrieveGroupChatHistory(contactJid);
+    for (const message of messages) {
+      console.log(`${message.from}: ${message.body}`);
+    }
+  }
+
+
   /**
    * retrieveGroupChatHistory: recupera el historial de mensajes de un grupo.
    * @param {String} groupJid : JID of the group chat
-   * @returns 
+   * @return {Array} messages : lista de mensajes del grupo.
    */
   async retrieveGroupChatHistory(groupJid) {
     // obtener el servicio MAM
@@ -700,6 +711,7 @@ class Client {
   /**
    * getInviteRequests: obtiene las invitaciones a grupos.
    * @param {Array} invites: lista de invitaciones a grupos
+   * @returns {Array} invites: lista de invitaciones a grupos
    */
   async getInviteRequests() {
     if (!this.xmpp) {
@@ -717,7 +729,7 @@ class Client {
    * changeStatus: cambia el estado de presencia del usuario.
    * @param {String} show: available, away, xa, dnd, chat
    * @param {String} status: mensaje de estado
-   * @returns 
+   * @return {Promise} promise: promesa de cambio de estado
    */
   async changeStatus(show, status = "") {
     return new Promise((resolve, reject) => {
@@ -748,6 +760,7 @@ class Client {
    * sendFile: envia un archivo a un usuario.
    * @param {String} jid: destinatario
    * @param {String} filePath : ruta del archivo
+   * @return {Promise} promise: promesa de envio de archivo
    */
   async sendFile(jid, filePath) {
     if (!this.xmpp) {
