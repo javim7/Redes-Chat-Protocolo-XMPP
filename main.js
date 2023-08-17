@@ -341,9 +341,6 @@ async function oneOnOneChatMain() {
     console.log("\nEscriba 'exit' para salir del chat.");
     console.log("Escriba 'file' para enviar un archivo.\n");
 
-    //obtener mensajes anteriores
-    // client.retrieveChatHistory(jid);
-
     // escucha poor mensajes entrantes
     client.xmpp.on('stanza', (stanza) => {
       // console.log(`Received stanza: ${stanza.toString()}`);
@@ -488,7 +485,6 @@ async function groupChatMain2(groupName) {
   //input de usuario
   rl.on('line', async line => {
     if (line === 'exit') {
-      // rl.close();
       client.receiveNotifications = true;
       console.log('Saliendo del chat grupal...')
       submenu();

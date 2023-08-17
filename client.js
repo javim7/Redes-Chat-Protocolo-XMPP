@@ -12,7 +12,6 @@
  * @requires path
  * @requires url
  * @requires https
- * @requires readline
  */
 
 
@@ -245,7 +244,6 @@ class Client {
       this.xmpp
         .send(probeStanza)
         .then(() => {
-          // console.log("Presence probe sent successfully");
         })
         .catch((err) => {
           console.error("Error sending presence probe:", err);
@@ -339,7 +337,6 @@ class Client {
                 const jid = contact.attrs.jid;
                 const name = contact.attrs.name || jid;
                 const subscription = contact.attrs.subscription;
-                // console.log(subscription)
   
                 // Obtener el estado de presencia del contacto (si está disponible)
                 const presence = this.xmpp.presences && this.xmpp.presences[jid];
@@ -497,8 +494,8 @@ class Client {
    * @param {string} groupName: nombre del grupo que se desea crear.
    */
   async createGroup(groupName) {
-    // const mucJid = `${groupName}@conference.${this.domain}`;
-  
+    
+    // stanza pra crear el grupo
     const presence = xml(
       'presence',
       { to: `${groupName}/${this.username}` },
@@ -586,14 +583,6 @@ class Client {
       console.log('Error:', err.message);
     }
   }
-  
-  async retrieveChatHistory(contactJid) {
-    const messages = await this.retrieveGroupChatHistory(contactJid);
-    for (const message of messages) {
-      console.log(`${message.from}: ${message.body}`);
-    }
-  }
-
 
   /**
    * retrieveGroupChatHistory: recupera el historial de mensajes de un grupo.
