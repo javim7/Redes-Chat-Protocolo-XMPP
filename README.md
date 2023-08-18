@@ -26,7 +26,7 @@ AlumChat is a powerful and easy-to-use XMPP client that allows you to connect wi
 
 ### Methods used
 
-Alumchat consists of a series of functionalities; these are all implemented as functions in the the `client.js`.
+The features above were implemented with a series of functions built in the `client.js`, which include:
 
 The four main functionalities the application has are the following:
 - `register(username, password, email)`: creates a new account in the server.
