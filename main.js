@@ -10,6 +10,8 @@
 
 const Client = require("./client");
 const readline = require('readline');
+const fs = require('fs');
+const path = require('path');
 
 // Creamos la interfaz para leer datos del usuario.
 let rl = readline.createInterface({
@@ -348,7 +350,22 @@ async function oneOnOneChatMain() {
         const body = stanza.getChild('body');
         if (body) {
           const message = body.text();
-          console.log(`${nombre}: ${message}`);
+          if (message.startsWith('File sent: ')) {
+            // Decodificar el archivo recibido
+            const parts = message.substring(11).split(':');
+            const fileName = parts[0];
+            const fileBase64 = parts[1];
+            const file = Buffer.from(fileBase64, 'base64');
+            
+            // guardar el archivo en el directorio ./received_files
+            const saveDir = './received_files';
+            fs.writeFileSync(path.join(saveDir, fileName), file);
+            console.log(`${nombre}: Envio un archivo: ${fileName}`)
+            console.log(`Archivo guardado en: ${saveDir}/${fileName}`);
+
+          } else {
+            console.log(`${nombre}: ${message}`);
+          }
         }
       }
     });
@@ -495,7 +512,16 @@ async function groupChatMain2(groupName) {
         await client.inviteToGroup(groupName, userJid);
         console.log(`Invitacion enviada a ${username}!`);
       });
-    } else {
+    } else if (line === 'file') {
+        rl.question('Ruta del archivo: ', async (filePath) => {
+          try {
+            await client.sendFile(groupName, filePath, true);
+            console.log('Archivo enviado exitosamente!');
+          } catch (err) {
+            console.log('Error:', err.message);
+          }
+        });
+      } else {
       await client.chatMessage(groupName, line);
     }
   });

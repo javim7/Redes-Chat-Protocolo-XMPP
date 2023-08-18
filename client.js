@@ -633,19 +633,33 @@ class Client {
    * @param {function} callback: funcion que se ejecuta cuando se recibe un mensaje de grupo
    */
   onGroupMessage(groupName, callback) {
-    // stanza para recibir mensajes de un grupo
+    // stanza to receive messages from a group
     this.xmpp.on('stanza', async (stanza) => {
       // console.log(stanza.toString)
       if (stanza.is('message') && stanza.attrs.type === 'groupchat') {
         const from = stanza.attrs.from.split('/')[1];
-        const message = stanza.getChildText('body');
+        const body = stanza.getChildText('body');
+        if (from && body && !from.startsWith(this.username)) {
+          if (body.startsWith('File sent: ')) {
+            // Decodificar el archivo recibido
+            const parts = body.substring(11).split(':');
+            const fileName = parts[0];
+            const fileBase64 = parts[1];
+            const file = Buffer.from(fileBase64, 'base64');
 
-        if(from && message && !from.startsWith(this.username)) {
-          callback(from, message);
+            // guardar el archivo en el directorio ./received_files
+            const saveDir = './received_files';
+            fs.writeFileSync(path.join(saveDir, fileName), file);
+            console.log(`${nombre}: Envio un archivo: ${fileName}`)
+            console.log(`Archivo guardado en: ${saveDir}/${fileName}`);
+
+          } else {
+            callback(from, body);
+          }
         }
       }
     });
-  }
+  }  
   
   /**
    * handleGroupInvite: acepta o rechaza una invitacion a un grupo.
@@ -746,100 +760,30 @@ class Client {
   }   
 
   /**
-   * sendFile: envia un archivo a un usuario.
+   * sendFile: envia un archivo, codificado en base 64 a un usuario.
    * @param {String} jid: destinatario
    * @param {String} filePath : ruta del archivo
-   * @return {Promise} promise: promesa de envio de archivo
    */
-  async sendFile(jid, filePath) {
+  async sendFile(jid, filePath, isGroupChat = false) {
     if (!this.xmpp) {
       throw new Error("Error en la conexion, intenta de nuevo.");
     }
   
-    // Check if the server supports HTTP File Upload
-    const uploadService = await this.discoverUploadService();
-    if (!uploadService) {
-      throw new Error('HTTP File Upload not supported by server');
-    }
-  
-    // Read the file and get its size and type
+    // Read the file and encode it in base64
     const file = fs.readFileSync(filePath);
-    const fileSize = fs.statSync(filePath).size;
-    const fileType = mime.lookup(filePath);
+    const fileBase64 = file.toString('base64');
   
-    // Request a slot from the server
-    const slot = await this.requestSlot(uploadService, filePath, fileSize, fileType);
+    // Get the original file name
+    const fileName = path.basename(filePath);
   
-    // Upload the file to the server
-    await this.uploadFile(slot.putUrl, file, fileType);
-  
-    // Send the URL of the uploaded file to the recipient
+    // Send the base64-encoded file and the original file name to the recipient
     const messageStanza = xml(
       "message",
-      { type: "chat", to: jid },
-      xml("body", {}, 'File sent: ' + slot.getUrl)
+      { type: isGroupChat ? "groupchat" : "chat", to: jid },
+      xml("body", {}, 'File sent: ' + fileName + ':' + fileBase64)
     );
     await this.xmpp.send(messageStanza);
-  }
-  
-  async discoverUploadService() {
-    const stanza = xml(
-      'iq',
-      { type: 'get', id: 'disco1' },
-      xml('query', { xmlns: 'http://jabber.org/protocol/disco#items' })
-    );
-    const response = await this.xmpp.send(stanza);
-    const services = response.getChild('query').getChildren('item').map(item => item.attrs.jid);
-    for (const service of services) {
-      const stanza = xml(
-        'iq',
-        { type: 'get', to: service, id: 'disco2' },
-        xml('query', { xmlns: 'http://jabber.org/protocol/disco#info' })
-      );
-      const response = await this.xmpp.send(stanza);
-      const identities = response.getChild('query').getChildren('identity');
-      for (const identity of identities) {
-        if (identity.attrs.category === 'store' && identity.attrs.type === 'file') {
-          return service;
-        }
-      }
-    }
-  }
-  
-  async requestSlot(service, fileName, fileSize, fileType) {
-    const stanza = xml(
-      'iq',
-      { type: 'get', to: service, id: 'request-slot' },
-      xml('request', { xmlns: 'urn:xmpp:http:upload:0', filename: fileName, size: fileSize, 'content-type': fileType })
-    );
-    const response = await this.xmpp.send(stanza);
-    const slot = response.getChild('slot', 'urn:xmpp:http:upload:0');
-    return {
-      putUrl: slot.getChildText('put'),
-      getUrl: slot.getChildText('get')
-    };
-  }
-  
-  async uploadFile(url, data, contentType) {
-    return new Promise((resolve, reject) => {
-      const options = url.parse(url);
-      options.method = 'PUT';
-      options.headers = {
-        'Content-Type': contentType,
-        'Content-Length': data.length
-      };
-      const req = https.request(options, res => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          resolve();
-        } else {
-          reject(new Error(`Failed to upload file. Status code: ${res.statusCode}`));
-        }
-      });
-      req.on('error', err => reject(err));
-      req.write(data);
-      req.end();
-    });
-  }  
+  }    
 
   /**
    * listenForStanzas: escucha los mensajes entrantes y los anade a la lista de notificaciones.
