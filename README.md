@@ -1,6 +1,18 @@
-# Name
+# AlumChat
 
-### AlumChat
+## Table of Contents
+
+- [Project Description](#project-description)
+  - [General Description](#general-description)
+  - [Introduction](#introduction)
+- [Functionalities](#functionalities)
+  - [General Key-Features](#general-key-features)
+  - [Methods used](#methods-used)
+- [How to use](#how-to-use)
+  - [Requirements](#requirements)
+  - [Installation](#installation)
+  - [Usage](#usage)
+- [Author](#author)
 
 # Project Description
 
@@ -26,7 +38,7 @@ AlumChat is a powerful and easy-to-use XMPP client that allows you to connect wi
 
 ### Methods used
 
-The features above were implemented with a series of functions built in the `client.js`, which include:
+The features above were implemented with a series of functions built in the `client.js` file and are divided in two sections (menu and sub-menu).
 
 The four main functionalities the application has are the following:
 - `register(username, password, email)`: creates a new account in the server.
@@ -79,13 +91,44 @@ npm install
 ### Usage
 To use AlumChat, follow these steps:
 
-1. Start the AlumChat program by running `node main.js` from the AlumChat directory.
-2. Follow the on-screen prompts to register a new account or log in to an existing account.
-3. Use the menu options to start chats, send files, and more.
+1. Start the AlumChat program by running the following command (make sure you're in the Alumchat directory):
+```bash
+node main.js
+```
+
+2. Follow the on-screen prompts of the main menu to register a new account or log in to an existing account.
+```JavaScript
+----BIENVENIDO A ALUMCHAT----
+
+MENU:
+[1] REGISTRARSE
+[2] INICIAR SESION
+[3] CERRAR SESION
+[4] ELIMINAR CUENTA
+[5] SALIR
+Opcion ->
+```
+
+3. Use the sub-menu options to start chats, send files, and more.
+```JavaScript
+Sesion iniciada exitosamente!
+Bienvenido de nuevo, usuario!
+
+QUE DESEA HACER?
+[1] Mostrar todos los usuarios/contactos y su estado
+[2] Agregar un usuario a los contactos
+[3] Mostrar detalles de contacto de un usuario
+[4] Comunicación 1 a 1 con cualquier usuario/contacto
+[5] Participar en conversaciones grupales
+[6] Definir mensaje de presencia
+[7] Ver notificaciones
+[8] Regresar al menu principal
+Opcion ->
+```
 
 # Author
 
 ### Javier Mombiela
 #### GitHub: javim7
 
-For questions, feedback, or support, please contact me at [rjmombiela@gmail.com](mailto:rjmombiela@gmail.com).
+For questions, feedback, or support, please contact me at: [rjmombiela@gmail.com](mailto:rjmombiela@gmail.com).
