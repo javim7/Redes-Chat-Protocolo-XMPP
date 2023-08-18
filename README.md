@@ -1,14 +1,32 @@
 # Name
 
-### XMPP-Chat
+### AlumChat
 
 # Project Description
 
+### General Description
+
 The purpose of this project is to create a client in JS, `client.js` which has to able to connect to an XMPP server with the domain *@alumchat.xyz* and server port *5222*. The client has to be able to do multiple functionalities, which are the general functionalities a chat applicacion can have. The project also contains a `main.js` file, which is the controller of the program: this file is the responsible of making the client work, and it does this by calling the functions and displaying the data in a way that is more organized. 
+
+### Introduction
+
+AlumChat is a powerful and easy-to-use XMPP client that allows you to connect with friends, family, and colleagues in real-time. With support for one-on-one and group chats, file sharing, and more, AlumChat makes it easy to stay connected and collaborate with others. Whether you’re at home, at work, or on the go, AlumChat keeps you connected.
 
 # Functionalities
 
-The application consists of a series of functionalities, that are all implemented as functions of the client.
+### General Key-Features
+
+- Real-time instant messaging with support for one-on-one and group conversations.
+- Manage your contact list, send friend requests, and accept new contacts.
+- Set your online status and presence message to let others know your availability.
+- Receive notifications for new messages, friend requests, and group invitations.
+- Accept or reject group invitations directly from the client.
+- Intuitive command-line interface for easy interaction and control.
+- Built on top of the robust XMPP protocol, ensuring secure and reliable communication.
+
+### Methods used
+
+Alumchat consists of a series of functionalities; these are all implemented as functions in the the `client.js`.
 
 The four main functionalities the application has are the following:
 - `register(username, password, email)`: creates a new account in the server.
@@ -37,23 +55,37 @@ It is also important to mention, that in the `client.js` there are many more fun
 
 # How to use
 
-The application is an easy one to use; the only steps it has are to install the libraries used, and to run the main file.
+### Requirements
+AlumChat requires Node.js to be installed on your system.
 
-1. Make sure you are in the correct directory and run the following command:
+### Installation
+To install AlumChat, follow these steps:
+
+1. Clone the AlumChat repository to your local machine.
 ```bash
-# install dependencies
-npm i
+git clone https://github.com/javim7/Redes-Chat-Protocolo-XMPP.git
 ```
 
-2. While in the same directory, run the main file:
+2. Navigate to the AlumChat directory:
 ```bash
-# run the main file
-node main.js
+cd Redes-Chat-Protocolo-XMPP
 ```
 
-3. Now you can use all the functionalities that the application offers.
+3. Install the dependencies:
+```bash
+npm install
+```
+
+### Usage
+To use AlumChat, follow these steps:
+
+1. Start the AlumChat program by running `node main.js` from the AlumChat directory.
+2. Follow the on-screen prompts to register a new account or log in to an existing account.
+3. Use the menu options to start chats, send files, and more.
 
 # Author
 
 ### Javier Mombiela
 #### GitHub: javim7
+
+For questions, feedback, or support, please contact me at [rjmombiela@gmail.com](mailto:rjmombiela@gmail.com).
