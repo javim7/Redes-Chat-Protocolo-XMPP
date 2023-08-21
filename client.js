@@ -140,7 +140,7 @@ class Client {
   async deleteAccount() {
     return new Promise((resolve, reject) => {
       if (!this.xmpp) {
-        reject(new Error("Error in connection, please try again."));
+        reject(new Error("Error en conexion, intente de nuevo."));
       }
       
       // creando la stanza para eliminar cuenta
@@ -361,7 +361,7 @@ class Client {
   async addContact(jid) {
     return new Promise(async (resolve, reject) => {
       if (!this.xmpp) {
-        reject(new Error("Error in connection, please try again."));
+        reject(new Error("E."));
       }
       
       // Crear la stanza para agregar el contacto
@@ -401,7 +401,7 @@ class Client {
   async handleContactRequest(fromJid, accept) {
     let fromJId2 = fromJid + "@" + this.domain;
     if (!this.xmpp) {
-      throw new Error("Error in connection, please try again.");
+      throw new Error("E.");
     }
     
     // Buscar la stanza de la solicitud de amistad
@@ -433,7 +433,7 @@ class Client {
    */
   async getContactRequests() {
     if (!this.xmpp) {
-      throw new Error("Error in connection, please try again.");
+      throw new Error("E.");
     }
     
     // Obtener las stanzas de las solicitudes de amistad
@@ -663,7 +663,7 @@ class Client {
    */
   async handleGroupInvite(fromJid, accept) {
     if (!this.xmpp) {
-      throw new Error("Error in connection, please try again.");
+      throw new Error("E.");
     }
     const groupJid = fromJid + "@conference." + this.domain;
     const userJid = this.username + "@" + this.domain;
@@ -713,7 +713,7 @@ class Client {
    */
   async getInviteRequests() {
     if (!this.xmpp) {
-      throw new Error("Error in connection, please try again.");
+      throw new Error("E.");
     }
     // obtener las invitaciones a grupos
     const invites = Array.from(this.notifications).filter(notification =>
@@ -732,7 +732,7 @@ class Client {
   async changeStatus(show, status = "") {
     return new Promise((resolve, reject) => {
       if (!this.xmpp) {
-        reject(new Error("Error in connection, please try again."));
+        reject(new Error("E."));
       }
       
       // stanza para cambiar el estado de presencia
@@ -764,14 +764,14 @@ class Client {
       throw new Error("Error en la conexion, intenta de nuevo.");
     }
   
-    // Read the file and encode it in base64
+    // leer el archivo y codificarlo en base 64
     const file = fs.readFileSync(filePath);
     const fileBase64 = file.toString('base64');
   
-    // Get the original file name
+    // obtener el nombre original del archivo
     const fileName = path.basename(filePath);
   
-    // Send the base64-encoded file and the original file name to the recipient
+    // enviar el archivo codificado en base 64 y el nombre original
     const messageStanza = xml(
       "message",
       { type: isGroupChat ? "groupchat" : "chat", to: jid },
@@ -785,7 +785,7 @@ class Client {
    */
   listenForStanzas() {
     if (!this.xmpp) {
-      throw new Error("Error in connection, please try again.");
+      throw new Error("E.");
     }
     
     //definimos el largo maximo para los mensajes
