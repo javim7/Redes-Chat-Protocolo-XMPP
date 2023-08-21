@@ -6,6 +6,8 @@
  * @created 2023-07-25
  * @requires ./client
  * @requires readline
+ * @requires fs
+ * @requires path
  */
 
 const Client = require("./client");

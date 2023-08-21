@@ -10,8 +10,6 @@
  * @requires xmpp/debug
  * @requires fs
  * @requires path
- * @requires url
- * @requires https
  */
 
 
@@ -20,9 +18,6 @@ const { client, xml } = require("@xmpp/client");
 const debug = require("@xmpp/debug");
 const fs = require('fs');
 const path = require('path');
-const url = require('url');
-const https = require('https');
-const mime = require('mime-types');
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
