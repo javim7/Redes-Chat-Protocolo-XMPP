@@ -794,6 +794,7 @@ class Client {
     // escuchando las stanzas entrantes
     this.xmpp.on("stanza", (stanza) => {
       // stanzas de mensaje, solo la de invitacion se agrega a la lista
+      // console.log(stanza.toString());
       if (stanza.is("message") && this.receiveNotifications) {
         // console.log(stanza.toString());
         const type = stanza.attrs.type;
@@ -806,6 +807,8 @@ class Client {
             body = body.substring(0, maxLength) + "...";
           }
 
+          console.log(`Nuevo mensaje de ${from.split("@")[0]}: ${body}`);
+        } else if(type === "headline" && body) {
           console.log(`Nuevo mensaje de ${from.split("@")[0]}: ${body}`);
         } else if (type === "groupchat" && body) {
           const jid = from.split("/")[1];
