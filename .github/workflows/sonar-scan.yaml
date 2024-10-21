@@ -16,7 +16,7 @@ jobs:
       - name: SonarQube Scan
         uses: sonarsource/sonarqube-scan-action@master
         with:
-          projectBaseDir: Redes-Chat-Protocolo-XMPP
+          projectBaseDir: .
           args: >
             -Dsonar.organization=my-org
             -Dsonar.projectKey=javim7_Redes-Chat-Protocolo-XMPP_AZKwKqQiWEa_O596rqxc
