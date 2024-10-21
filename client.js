@@ -494,7 +494,7 @@ class Client {
     const presence = xml(
       'presence',
       { to: `${groupName}/${this.username}` },
-      xml('x', { xmlns: 'http://jabber.org/protocol/muc' })
+      xml('x', { xmlns: 'https://jabber.org/protocol/muc' })
     );
     await this.xmpp.send(presence);
     
