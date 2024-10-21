@@ -1,29 +1,25 @@
-name: CI/CD workflow for Maven Build and Sonar Code scan
+name: CI/CD workflow for Sonar Code scan
+
 on:
   push:
     branches:
       - main
   workflow_dispatch:
+
 jobs:
-  build:
+  sonar-scan:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
-    - name: Set up JDK 11
-      uses: actions/setup-java@v2
-      with:
-        distribution: 'adopt'
-        java-version: '11'
-    - name: Build with Maven
-      run: mvn clean install -f MyWebApp/pom.xml
-    - name: SonarQube Scan
-      uses: sonarsource/sonarqube-scan-action@master
-      with:
-        projectBaseDir: .
-        args: >
-          -Dsonar.organization=my-org
-          -Dsonar.projectKey=javim7_Redes-Chat-Protocolo-XMPP_AZKwKqQiWEa_O596rqxc
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@master
+        with:
+          projectBaseDir: Redes-Chat-Protocolo-XMPP
+          args: >
+            -Dsonar.organization=my-org
+            -Dsonar.projectKey=javim7_Redes-Chat-Protocolo-XMPP_AZKwKqQiWEa_O596rqxc
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
