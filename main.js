@@ -270,66 +270,86 @@ async function getContactMain() {
  */
 async function addContactMain() {
   console.log("\nGESTIONAR CONTACTOS:");
-  // mostrar las opciones disponibles
+  displayContactOptions();
+  
+  const option = await getUserInput("Opción -> ");
+  await handleContactOption(option);
+}
+
+function displayContactOptions() {
   console.log("[1] Agregar contacto");
   console.log("[2] Aceptar solicitudes de contacto");
+}
 
-  // obtener la opcion del usuario
-  rl.question("Opción -> ", async (answer) => {
-    if (answer === '1') {
-      // si el usuario elige agregar un contacto, se le pide el nombre de usuario
-      rl.question("Nombre de usuario: ", async (nombre) => {
-        const jid = nombre + "@alumchat.xyz";
-        try {
-          await client.addContact(jid);
-          console.log(`Solicitud de agregar contacto ${jid} enviada al servidor.`);
-        } catch (err) {
-          console.error('Error al agregar el contacto:', err);
-        }
-        submenu();
-      });
-    } else if (answer === '2') {
-      // si el usuario elige aceptar solicitudes de contacto, se llama a acceptContactRequest()
-      try {
-        const requests = await client.getContactRequests();
-        if (requests.length === 0) {
-          console.log("No hay solicitudes de amistad pendientes.");
-          submenu();
-          return;
-        }
-
-        console.log("\nSolicitudes de amistad pendientes:");
-        for (let i = 0; i < requests.length; i++) {
-          console.log(`[${i + 1}] ${requests[i]}`);
-        }
-
-        // obtener la solicitud que el usuario desea aceptar
-        rl.question("Elija el número de la solicitud que desea aceptar o eliminar: ", async (answer) => {
-          const index = parseInt(answer) - 1;
-
-          if (isNaN(index) || index < 0 || index >= requests.length) {
-            console.log("Número inválido. Intente de nuevo.");
-            addContactMain();
-            return;
-          }
-
-          const request = requests[index];
-          const fromJid = request.match(/Nueva solicitud de amistad de: (.+)/)[1];
-          rl.question(`¿Desea aceptar la solicitud de ${fromJid}? (s/n): `, async (answer) => {
-            const accept = answer.toLowerCase() === 's';
-            await client.handleContactRequest(fromJid, accept);
-            submenu();
-          });
-        });
-      } catch (err) {
-        console.error('Error al aceptar usuarios:', err);
-        submenu();
-      }
-    } else {
+async function handleContactOption(option) {
+  switch (option) {
+    case '1':
+      await addNewContact();
+      break;
+    case '2':
+      await handleContactRequests();
+      break;
+    default:
       console.log("Opción inválida. Intente de nuevo.");
-      addContactMain();
+      await addContactMain();
+  }
+}
+
+async function addNewContact() {
+  const nombre = await getUserInput("Nombre de usuario: ");
+  const jid = `${nombre}@alumchat.xyz`;
+  try {
+    await client.addContact(jid);
+    console.log(`Solicitud de agregar contacto ${jid} enviada al servidor.`);
+  } catch (err) {
+    console.error('Error al agregar el contacto:', err);
+  }
+  submenu();
+}
+
+async function handleContactRequests() {
+  try {
+    const requests = client.getContactRequests();
+    if (requests.length === 0) {
+      console.log("No hay solicitudes de amistad pendientes.");
+      submenu();
     }
+
+    displayContactRequests(requests);
+    const selectedRequest = await selectContactRequest(requests);
+    if (selectedRequest) {
+      await processContactRequest(selectedRequest);
+    }
+  } catch (err) {
+    console.error('Error al aceptar usuarios:', err);
+    submenu();
+  }
+}
+
+function displayContactRequests(requests) {
+  console.log("\nSolicitudes de amistad pendientes:");
+  requests.forEach((request, index) => {
+    console.log(`[${index + 1}] ${request}`);
   });
+}
+
+async function selectContactRequest(requests) {
+  const answer = await getUserInput("Elija el número de la solicitud que desea aceptar o eliminar: ");
+  const index = parseInt(answer) - 1;
+
+  if (isNaN(index) || index < 0 || index >= requests.length) {
+    console.log("Número inválido. Intente de nuevo.");
+    return null;
+  }
+
+  return requests[index];
+}
+
+async function processContactRequest(request) {
+  const fromJid = request.match(/Nueva solicitud de amistad de: (.+)/)[1];
+  const accept = await getUserInput(`¿Desea aceptar la solicitud de ${fromJid}? (s/n): `);
+  await client.handleContactRequest(fromJid, accept.toLowerCase() === 's');
+  submenu();
 }
 
 /**
@@ -338,63 +358,75 @@ async function addContactMain() {
 async function oneOnOneChatMain() {
   console.log("\nCOMUNICACION 1 A 1:");
   client.receiveNotifications = false;
-  // obtener el nombre de usuario
-  rl.question("Nombre de usuario: ", async (nombre) => {
-    const jid = nombre + "@alumchat.xyz";
-    console.log(`Iniciando chat con ${jid}...`);
-    console.log("\nEscriba 'exit' para salir del chat.");
-    console.log("Escriba 'file' para enviar un archivo.\n");
+  
+  const nombre = await getUserInput("Nombre de usuario: ");
+  const jid = `${nombre}@alumchat.xyz`;
+  
+  console.log(`Iniciando chat con ${jid}...`);
+  displayChatInstructions();
 
-    // escucha poor mensajes entrantes
-    client.xmpp.on('stanza', (stanza) => {
-      // console.log(`Received stanza: ${stanza.toString()}`);
-      if (stanza.is('message') && stanza.attrs.type === 'chat' && stanza.attrs.from.startsWith(jid)) {
-        const body = stanza.getChild('body');
-        if (body) {
-          const message = body.text();
-          if (message.startsWith('File sent: ')) {
-            // Decodificar el archivo recibido
-            const parts = message.substring(11).split(':');
-            const fileName = parts[0];
-            const fileBase64 = parts[1];
-            const file = Buffer.from(fileBase64, 'base64');
-            
-            // guardar el archivo en el directorio ./received_files
-            const saveDir = './received_files';
-            fs.writeFileSync(path.join(saveDir, fileName), file);
-            console.log(`${nombre}: Envio un archivo: ${fileName}`)
-            console.log(`Archivo guardado en: ${saveDir}/${fileName}`);
+  const chatHandler = new OneOnOneChatHandler(client, jid, nombre);
+  await chatHandler.startListening();
+  await handleUserInput(chatHandler);
+}
 
-          } else {
-            console.log(`${nombre}: ${message}`);
-          }
-        }
-      }
-    });
+function displayChatInstructions() {
+  console.log("\nEscriba 'exit' para salir del chat.");
+  console.log("Escriba 'file' para enviar un archivo.\n");
+}
 
-    //recibir input
-    rl.on('line', async (line) => {
-      if (line === 'exit') {
-        client.receiveNotifications = true;
-        console.log('Saliendo del chat...')
-        submenu();
-        return;
-      } else if (line === 'file') {
-        rl.question('Ruta del archivo: ', async (filePath) => {
-          try {
-            await client.sendFile(jid, filePath);
-            console.log('Archivo enviado exitosamente!');
-          } catch (err) {
-            console.log('Error:', err.message);
-          }
-        });
-      } else {
-        await client.directMessage(jid, line);
-      }
-    });
+// Aplicando el Principio de Responsabilidad Única (SRP)
+// Esta clase tiene una única responsabilidad: manejar el chat uno a uno
+class OneOnOneChatHandler {
+  constructor(client, jid, nombre) {
+    this.client = client;
+    this.jid = jid;
+    this.nombre = nombre;
+  }
 
-    rl.setPrompt('Mensaje: ');
-    rl.prompt();
+  // Métodos de la clase...
+}
+
+// Aplicando el Principio Abierto-Cerrado (OCP)
+// Esta función está abierta para extensión (se pueden añadir más casos) pero cerrada para modificación
+async function handleUserInput(chatHandler) {
+  rl.on('line', async (line) => {
+    switch (line.trim()) {
+      case 'exit':
+        await handleExit();
+        break;
+      case 'file':
+        await handleFileSend(chatHandler);
+        break;
+      default:
+        await chatHandler.sendMessage(line);
+    }
+  });
+
+  rl.setPrompt('Mensaje: ');
+  rl.prompt();
+}
+
+// Aplicando el Principio de Inversión de Dependencias (DIP)
+// Esta función depende de abstracciones (chatHandler) en lugar de implementaciones concretas
+async function handleFileSend(chatHandler) {
+  const filePath = await getUserInput('Ruta del archivo: ');
+  await chatHandler.sendFile(filePath);
+}
+
+
+// El Principio de Sustitución de Liskov (LSP) se aplicaría si tuviéramos
+// subclases de OneOnOneChatHandler, asegurando que puedan ser usadas
+// en lugar de la clase base sin alterar el comportamiento del programa
+async function handleExit() {
+  client.receiveNotifications = true;
+  console.log('Saliendo del chat...');
+  submenu();
+}
+
+async function getUserInput(prompt) {
+  return new Promise((resolve) => {
+    rl.question(prompt, resolve);
   });
 }
 
@@ -403,86 +435,115 @@ async function oneOnOneChatMain() {
  */
 async function groupChatMain() {
   console.log('\nPARTICIPAR EN CONVERSACIONES GRUPALES:');
-  // mostrar las opciones disponibles
+  displayGroupChatOptions();
+  
+  const option = await getUserInput('Opcion: ');
+  await handleGroupChatOption(option);
+}
+
+function displayGroupChatOptions() {
   console.log('[1] Crear un grupo');
   console.log('[2] Chatear en un grupo existente');
   console.log('[3] Aceptar invitaciones de grupo');
-  rl.question('Opcion: ', async option => {
-    if (option === '1') {
-      // se crea un nuevo grupo
-      rl.question('\nNombre del grupo: ', async groupName => {
-        groupJid = groupName + '@conference.alumchat.xyz';
-        try {
-          await client.createGroup(groupJid);
-          console.log(`Grupo ${groupName} creado exitosamente!`);
-          await groupChatMain2(groupJid);
-        } catch (err) {
-          console.log('Error:', err.message);
-          submenu();
-        }
-      });
-    } else if (option === '2') {
-      // se une a un grupo existente
-      rl.question('\nNombre del grupo: ', async groupName2 => {
-        groupJid = groupName2 + '@conference.alumchat.xyz';
-        try {
-          await client.joinGroup(groupJid); // se une al grupo
-          await groupChatMain2(groupJid);
-        } catch (err) {
-          console.log('Error:', err.message);
-          submenu();
-        }
-      });
-    } else if (option === '3') {
-      // aceptar invitaciones de grupo
-      try {
-        const invites = await client.getInviteRequests();
-        if (invites.length === 0) {
-          console.log("\nNo hay invitaciones de grupo pendientes.");
-          submenu();
-          return;
-        }
+}
 
-        console.log("\nInvitaciones de grupo pendientes:");
-        for (let i = 0; i < invites.length; i++) {
-          console.log(`[${i + 1}] ${invites[i]}`);
-        }
-
-        // obtener la invitación que el usuario desea aceptar
-        rl.question("Elija el número de la invitación que desea aceptar o eliminar: ", async (answer) => {
-          const index = parseInt(answer) - 1;
-
-          if (isNaN(index) || index < 0 || index >= invites.length) {
-            console.log("Número inválido. Intente de nuevo.");
-            groupChatMain();
-            return;
-          }
-          
-          const invite = invites[index];
-          const fromJid = invite.match(/Nueva invitación de grupo de: (.+)/)[1];
-          rl.question(`¿Desea aceptar la invitación de ${fromJid}? (s/n): `, async (answer) => {
-            const accept = answer.toLowerCase() === 's';
-            await client.handleGroupInvite(fromJid, accept);
-            // si se acepta la invitación, se une al grupo, sino se va al submenu
-            if (accept) {
-              groupJid = fromJid + '@conference.alumchat.xyz';
-              await client.joinGroup(groupJid);
-              await groupChatMain2(groupJid);
-            } else {
-              // console.log(`Invitación de grupo de ${fromJid} eliminada.`);
-              submenu();
-            }
-          });
-        });
-      } catch (err) {
-        console.error('Error al aceptar invitaciones:', err);
-        submenu();
-      }
-    } else {
+async function handleGroupChatOption(option) {
+  switch (option) {
+    case '1':
+      await createNewGroup();
+      break;
+    case '2':
+      await joinExistingGroup();
+      break;
+    case '3':
+      await handleGroupInvitations();
+      break;
+    default:
       console.log('Opcion invalida! Intente de nuevo.');
-      groupChatMain();
+      await groupChatMain();
+  }
+}
+
+async function createNewGroup() {
+  const groupName = await getUserInput('\nNombre del grupo: ');
+  const groupJid = `${groupName}@conference.alumchat.xyz`;
+  try {
+    await client.createGroup(groupJid);
+    console.log(`Grupo ${groupName} creado exitosamente!`);
+    await groupChatMain2(groupJid);
+  } catch (err) {
+    handleError(err);
+  }
+}
+
+async function joinExistingGroup() {
+  const groupName = await getUserInput('\nNombre del grupo: ');
+  const groupJid = `${groupName}@conference.alumchat.xyz`;
+  try {
+    await client.joinGroup(groupJid);
+    await groupChatMain2(groupJid);
+  } catch (err) {
+    handleError(err);
+  }
+}
+
+async function handleGroupInvitations() {
+  try {
+    const invites = client.getInviteRequests();
+    if (invites.length === 0) {
+      console.log("\nNo hay invitaciones de grupo pendientes.");
+      submenu();
+      return;
     }
+
+    displayGroupInvites(invites);
+    const selectedInvite = await selectGroupInvite(invites);
+    if (selectedInvite) {
+      await processGroupInvite(selectedInvite);
+    }
+  } catch (err) {
+    console.error('Error al aceptar invitaciones:', err);
+    submenu();
+  }
+}
+
+function displayGroupInvites(invites) {
+  console.log("\nInvitaciones de grupo pendientes:");
+  invites.forEach((invite, index) => {
+    console.log(`[${index + 1}] ${invite}`);
   });
+}
+
+async function selectGroupInvite(invites) {
+  const answer = await getUserInput("Elija el número de la invitación que desea aceptar o eliminar: ");
+  const index = parseInt(answer) - 1;
+
+  if (isNaN(index) || index < 0 || index >= invites.length) {
+    console.log("Número inválido. Intente de nuevo.");
+    return null;
+  }
+
+  return invites[index];
+}
+
+async function processGroupInvite(invite) {
+  const fromJid = invite.match(/Nueva invitación de grupo de: (.+)/)[1];
+  const accept = await getUserInput(`¿Desea aceptar la invitación de ${fromJid}? (s/n): `);
+  
+  await client.handleGroupInvite(fromJid, accept.toLowerCase() === 's');
+  
+  if (accept.toLowerCase() === 's') {
+    const groupJid = `${fromJid}@conference.alumchat.xyz`;
+    await client.joinGroup(groupJid);
+    await groupChatMain2(groupJid);
+  } else {
+    submenu();
+  }
+}
+
+function handleError(err) {
+  console.log('Error:', err.message);
+  submenu();
 }
 
 /**
@@ -507,10 +568,9 @@ async function groupChatMain2(groupName) {
       client.receiveNotifications = true;
       console.log('Saliendo del chat grupal...')
       submenu();
-      return;
     } else if (line === 'invite') {
       rl.question('\nNombre de usuario a invitar: ', async username => {
-        userJid = username + '@alumchat.xyz';
+        let userJid = username + '@alumchat.xyz';
         await client.inviteToGroup(groupName, userJid);
         console.log(`Invitacion enviada a ${username}!`);
       });
@@ -555,7 +615,7 @@ async function changeStatusMain() {
         case '2':
           showOption = "away";
           break;
-        case '3':
+        case '3':  
           showOption = "xa";
           break;
         case '4':
@@ -593,7 +653,7 @@ async function changeStatusMain() {
       console.log("No tienes notificaciones.");
     } else {
       // mostrar las notificaciones
-      for(notification of client.notifications) {
+      for(let notification of client.notifications) {
         console.log(notification);
       }
     }
@@ -602,3 +662,6 @@ async function changeStatusMain() {
   
 //corremos el programa
 main();
+
+// exportar funciones para las pruebas
+module.exports = { groupChatMain };

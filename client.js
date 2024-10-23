@@ -224,77 +224,80 @@ class Client {
    * @return {Promise}: promesa que se resuelve cuando se obtiene el estado de presencia.
    */
   async getPresence(jid, timeout = 2000, delay = 500) {
-    return new Promise((resolve, reject) => {
-      if (!this.xmpp) {
-        reject(new Error("Error en conexion, intente de nuevo."));
-      }
-      
-      // creando la stanza para obtener el estado de presencia
-      const probeStanza = xml(
-        "presence",
-        { type: "probe", to: jid }
-      );
-        
-      // Enviar la stanza al servidor
-      this.xmpp
-        .send(probeStanza)
-        .then(() => {
-        })
-        .catch((err) => {
-          console.error("Error sending presence probe:", err);
-          reject(new Error("Error al enviar la solicitud de presencia."));
-        });
-  
-      const timeoutId = setTimeout(() => {
-        reject(new Error("Timeout al recibir la presencia del servidor."));
-      }, timeout);
-  
-      let presence = null;
-      
-      // Evento para recibir la respuesta del servidor y llenar datos de contacto
-      this.xmpp.on("stanza", (stanza) => {
-        if (stanza.is("presence")) {
-          // console.log("Received presence stanza:", stanza.toString());
-          const from = stanza.attrs.from;
-          const fromJid = from.split("/")[0];
-          if (fromJid === jid) {
-            clearTimeout(timeoutId);
-            if (stanza.attrs.type === "error") {
-              presence = { show: "Offline", status: null };
-            } else {
-              let show = stanza.getChildText("show");
-              const status = stanza.getChildText("status");
-  
-              // ver si hay un estado de presencia
-              if (show || status) {
-                // if para cambiar el estado de presencia a un string
-                if(show === null || show === undefined || show === "") {
-                  show = "Available";
-                }
-                else if(show === "away"){
-                  show = "Away";
-                } else if(show === "xa"){
-                  show = "Not Available";
-                } else if(show === "dnd"){
-                  show = "Busy";
-                } else if (show === "unavailable") {
-                  show = "Offline";
-                }
-                presence = { show, status };
-              } else{
-                presence = { show: "Available", status: null };
-              }
-            }
-          }
-        } 
-      });
-      
-      // si no se recibe respuesta del servidor, se envia un objeto vacio
-      setTimeout(() => {
-        resolve(presence || { show: "Offline", status: null });
-      }, delay);
+    if (!this.xmpp) {
+      throw new Error("Error en conexion, intente de nuevo.");
+    }
+
+    const probeStanza = this.createPresenceProbeStanza(jid);
+    await this.sendPresenceProbe(probeStanza);
+
+    return new Promise((resolve) => {
+      const timeoutId = this.setPresenceTimeout(timeout, resolve);
+      this.listenForPresenceStanza(jid, timeoutId, resolve, delay);
     });
-  }  
+  }
+
+  createPresenceProbeStanza(jid) {
+    return xml("presence", { type: "probe", to: jid });
+  }
+
+  async sendPresenceProbe(probeStanza) {
+    try {
+      await this.xmpp.send(probeStanza);
+    } catch (err) {
+      console.error("Error sending presence probe:", err);
+      throw new Error("Error al enviar la solicitud de presencia.");
+    }
+  }
+
+  setPresenceTimeout(timeout, resolve) {
+    return setTimeout(() => {
+      resolve(this.createOfflinePresence());
+    }, timeout);
+  }
+
+  listenForPresenceStanza(jid, timeoutId, resolve, delay) {
+    const handleStanza = (stanza) => {
+      if (this.isRelevantPresenceStanza(stanza, jid)) {
+        clearTimeout(timeoutId);
+        const presence = this.parsePresenceStanza(stanza);
+        this.xmpp.removeListener("stanza", handleStanza);
+        setTimeout(() => resolve(presence), delay);
+      }
+    };
+
+    this.xmpp.on("stanza", handleStanza);
+  }
+
+  isRelevantPresenceStanza(stanza, jid) {
+    return stanza.is("presence") && stanza.attrs.from.split("/")[0] === jid;
+  }
+
+  parsePresenceStanza(stanza) {
+    if (stanza.attrs.type === "error") {
+      return this.createOfflinePresence();
+    }
+
+    const show = this.parseShowStatus(stanza.getChildText("show"));
+    const status = stanza.getChildText("status");
+
+    return { show, status };
+  }
+
+  parseShowStatus(show) {
+    const statusMap = {
+      "": "Available",
+      "away": "Away",
+      "xa": "Not Available",
+      "dnd": "Busy"
+    };
+
+    return statusMap[show] || "Available";
+  }
+
+  createOfflinePresence() {
+    return { show: "Offline", status: null };
+  }
   
   /**
    * getContact: obtiene la informacion de un contacto en especifico.
@@ -302,57 +305,80 @@ class Client {
    * @return {Promise}: promesa que se resuelve cuando se obtiene la informacion del contacto.
    */
   async getContact(jid) {
-    return new Promise((resolve, reject) => {
-      if (!this.xmpp) {
-        reject(new Error("Error en conexion, intente de nuevo."));
-      }
-      
-      // creando la stanza para obtener los contactos
-      const rosterStanza = xml(
-        'iq',
-        { type: 'get', id: 'roster' },
-        xml('query', { xmlns: 'jabber:iq:roster' })
-      );
-        
-      // Enviar la stanza al servidor
-      this.xmpp.send(rosterStanza).catch((err) => {
-        reject(new Error('Error al enviar la solicitud de roster.'));
-      });
-  
-      // Evento para recibir la respuesta del roster del servidor
-      this.xmpp.on('stanza', (stanza) => {
-        if (stanza.is('iq') && stanza.attrs.type === 'result') {
-          const query = stanza.getChild('query', 'jabber:iq:roster');
-          if (query) {
-            const contacts = query.getChildren('item');
-  
-            let contactList = [];
-            contacts.forEach((contact) => {
-              if (contact.attrs.jid === jid) {
-                const jid = contact.attrs.jid;
-                const name = contact.attrs.name || jid;
-                const subscription = contact.attrs.subscription;
-  
-                // Obtener el estado de presencia del contacto (si está disponible)
-                const presence = this.xmpp.presences && this.xmpp.presences[jid];
-                const status = presence && presence.status ? presence.status : 'Offline';
-  
-                contactList.push({jid, name, subscription, status});
-              }
-            });
-            
-            // si no se encuentra el contacto, se envia un error
-            if (contactList.length === 0) {
-              reject(new Error(`No se encontró un contacto con el JID ${jid}.`));
-            } else {
-              resolve(contactList[0]);
-            }
-          }
-        }
-      });
-    });
-  }  
+    if (!this.xmpp) {
+      throw new Error("Error en conexión, intente de nuevo.");
+    }
 
+    const rosterStanza = this.createRosterStanza();
+    await this.sendRosterStanza(rosterStanza);
+
+    return new Promise((resolve, reject) => {
+      this.handleRosterResponse(jid, resolve, reject);
+    });
+  }
+
+  createRosterStanza() {
+    return xml(
+      'iq',
+      { type: 'get', id: 'roster' },
+      xml('query', { xmlns: 'jabber:iq:roster' })
+    );
+  }
+
+  async sendRosterStanza(rosterStanza) {
+    try {
+      await this.xmpp.send(rosterStanza);
+    } catch (err) {
+      throw new Error('Error al enviar la solicitud de roster.');
+    }
+  }
+
+  handleRosterResponse(jid, resolve, reject) {
+    const handleStanza = (stanza) => {
+      if (this.isRosterResultStanza(stanza)) {
+        const contact = this.findContactInRoster(stanza, jid);
+        this.xmpp.removeListener('stanza', handleStanza);
+        
+        if (contact) {
+          resolve(contact);
+        } else {
+          reject(new Error(`No se encontró un contacto con el JID ${jid}.`));
+        }
+      }
+    };
+
+    this.xmpp.on('stanza', handleStanza);
+  }
+
+  isRosterResultStanza(stanza) {
+    return stanza.is('iq') && 
+           stanza.attrs.type === 'result' && 
+           stanza.getChild('query', 'jabber:iq:roster');
+  }
+
+  findContactInRoster(stanza, jid) {
+    const query = stanza.getChild('query', 'jabber:iq:roster');
+    const contacts = query.getChildren('item');
+
+    for (const contact of contacts) {
+      if (contact.attrs.jid === jid) {
+        return this.createContactObject(contact);
+      }
+    }
+
+    return null;
+  }
+
+  createContactObject(contact) {
+    const jid = contact.attrs.jid;
+    const name = contact.attrs.name || jid;
+    const subscription = contact.attrs.subscription;
+    const presence = this.xmpp.presences && this.xmpp.presences[jid];
+    const status = presence && presence.status ? presence.status : 'Offline';
+
+    return { jid, name, subscription, status };
+  }
+  
   /**
    * addContact: agrega un nuevo contacto al roster.
    * @param {string} jid: nombre de usuario del contacto que se desea agregar.
@@ -489,6 +515,9 @@ class Client {
    * @param {string} groupName: nombre del grupo que se desea crear.
    */
   async createGroup(groupName) {
+    if (!this.xmpp) {
+      throw new Error("Error en la conexion, intenta de nuevo.");
+    }
     
     // stanza pra crear el grupo
     const presence = xml(
@@ -504,7 +533,7 @@ class Client {
       { type: 'set', to: groupName },
       xml(
         'query',
-        { xmlns: 'http://jabber.org/protocol/muc#owner' },
+        { xmlns: 'https://jabber.org/protocol/muc#owner' },
         xml(
           'x',
           { xmlns: 'jabber:x:data', type: 'submit' },
@@ -512,7 +541,7 @@ class Client {
             xml(
               'field',
               { var: 'FORM_TYPE', type: 'hidden' },
-              xml('value', {}, 'http://jabber.org/protocol/muc#roomconfig')
+              xml('value', {}, 'https://jabber.org/protocol/muc#roomconfig')
             ),
             xml(
               'field',
@@ -542,7 +571,7 @@ class Client {
       { to: groupName },
       xml(
         'x',
-        { xmlns: 'http://jabber.org/protocol/muc#user' },
+        { xmlns: 'https://jabber.org/protocol/muc#user' },
         xml(
           'invite',
           { to: `${username}` },
@@ -564,12 +593,12 @@ class Client {
       const presence = xml(
         'presence',
         { to: `${groupJid}/${this.username}` },
-        xml('x', { xmlns: 'http://jabber.org/protocol/muc' })
+        xml('x', { xmlns: 'https://jabber.org/protocol/muc' })
       );
       await this.xmpp.send(presence);
   
       // obtener mensajes viejos del grupo
-      const oldMessages = await this.retrieveGroupChatHistory(groupJid);
+      const oldMessages = this.retrieveGroupChatHistory(groupJid);
       for (const message of oldMessages) {
         console.log(`${message.from}: ${message.body}`);
       }
@@ -630,7 +659,6 @@ class Client {
   onGroupMessage(groupName, callback) {
     // stanza to receive messages from a group
     this.xmpp.on('stanza', async (stanza) => {
-      // console.log(stanza.toString)
       if (stanza.is('message') && stanza.attrs.type === 'groupchat') {
         const from = stanza.attrs.from.split('/')[1];
         const body = stanza.getChildText('body');
@@ -678,7 +706,7 @@ class Client {
       const presence = xml(
         'presence',
         { from: userJid, to: groupJid },
-        xml('x', { xmlns: 'http://jabber.org/protocol/muc' })
+        xml('x', { xmlns: 'https://jabber.org/protocol/muc' })
       );
       this.xmpp.send(presence);
       console.log(`Invitación de grupo de ${fromJid} aceptada.`);
@@ -688,7 +716,7 @@ class Client {
         { from: userJid, to: groupJid },
         xml(
           'x',
-          { xmlns: 'http://jabber.org/protocol/muc#user' },
+          { xmlns: 'https://jabber.org/protocol/muc#user' },
           xml(
             'decline',
             { to: fromJid },
@@ -785,50 +813,83 @@ class Client {
    */
   listenForStanzas() {
     if (!this.xmpp) {
-      throw new Error("E.");
+      throw new Error("Error en conexión, intente de nuevo.");
     }
-    
-    //definimos el largo maximo para los mensajes
-    const maxLength = 40;
 
-    // escuchando las stanzas entrantes
-    this.xmpp.on("stanza", (stanza) => {
-      // stanzas de mensaje, solo la de invitacion se agrega a la lista
-      // console.log(stanza.toString());
-      if (stanza.is("message") && this.receiveNotifications) {
-        // console.log(stanza.toString());
-        const type = stanza.attrs.type;
-        const from = stanza.attrs.from;
-        let body = stanza.getChildText("body");
-  
-        if (type === "chat" && body) {
-          //vemos si el mensaje es muy largo
-          if (body.length > maxLength) {
-            body = body.substring(0, maxLength) + "...";
-          }
+    this.xmpp.on("stanza", this.handleStanza.bind(this));
+  }
 
-          console.log(`Nuevo mensaje de ${from.split("@")[0]}: ${body}`);
-        } else if(type === "headline" && body) {
-          console.log(`Nuevo mensaje de ${from.split("@")[0]}: ${body}`);
-        } else if (type === "groupchat" && body) {
-          const jid = from.split("/")[1];
-          const groupname = from.split("@")[0];
-          //vemos si el mensaje es muy largo
-          if (body.length > maxLength) {
-            body = body.substring(0, maxLength) + "...";
-          }
-          console.log(`Nuevo mensaje de ${jid} en grupo ${groupname}: ${body}`);
-        } else if (from.includes("@conference")) {
-          console.log(`Nueva invitación de grupo de: ${from.split("@")[0]}`);
-          this.notifications.add(`Nueva invitación de grupo de: ${from.split("@")[0]}`);
-        }
-      } else if (stanza.is("presence") && stanza.attrs.type === "subscribe") {
-        // solicitudes de amistad
-        console.log(`Nueva solicitud de amistad de: ${stanza.attrs.from.split("@")[0]}`);
-        this.notifications.add(`Nueva solicitud de amistad de: ${stanza.attrs.from.split("@")[0]}`);
-      }
-    });
-  }  
+  handleStanza(stanza) {
+    if (!this.receiveNotifications) return;
+
+    const handlers = {
+      message: this.handleMessageStanza.bind(this),
+      presence: this.handlePresenceStanza.bind(this)
+    };
+
+    const handler = handlers[stanza.name];
+    if (handler) {
+      handler(stanza);
+    }
+  }
+
+  handleMessageStanza(stanza) {
+    const type = stanza.attrs.type;
+    const from = stanza.attrs.from;
+    const body = stanza.getChildText("body");
+
+    const messageHandlers = {
+      chat: this.handleChatMessage.bind(this),
+      headline: this.handleHeadlineMessage.bind(this),
+      groupchat: this.handleGroupChatMessage.bind(this)
+    };
+
+    const handler = messageHandlers[type];
+    if (handler && body) {
+      handler(from, body);
+    } else if (from.includes("@conference")) {
+      this.handleGroupInvitation(from);
+    }
+  }
+
+  handlePresenceStanza(stanza) {
+    if (stanza.attrs.type === "subscribe") {
+      this.handleFriendRequest(stanza.attrs.from);
+    }
+  }
+
+  handleChatMessage(from, body) {
+    const truncatedBody = this.truncateMessage(body);
+    console.log(`Nuevo mensaje de ${from.split("@")[0]}: ${truncatedBody}`);
+  }
+
+  handleHeadlineMessage(from, body) {
+    console.log(`Nuevo mensaje de ${from.split("@")[0]}: ${body}`);
+  }
+
+  handleGroupChatMessage(from, body) {
+    const [groupname, jid] = from.split("@");
+    const truncatedBody = this.truncateMessage(body);
+    console.log(`Nuevo mensaje de ${jid} en grupo ${groupname}: ${truncatedBody}`);
+  }
+
+  handleGroupInvitation(from) {
+    const groupName = from.split("@")[0];
+    const message = `Nueva invitación de grupo de: ${groupName}`;
+    console.log(message);
+    this.notifications.add(message);
+  }
+
+  handleFriendRequest(from) {
+    const username = from.split("@")[0];
+    const message = `Nueva solicitud de amistad de: ${username}`;
+    console.log(message);
+    this.notifications.add(message);
+  }
+
+  truncateMessage(message, maxLength = 40) {
+    return message.length > maxLength ? `${message.substring(0, maxLength)}...` : message;
+  }
 
 }
 
